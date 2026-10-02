@@ -1,0 +1,140 @@
+/* Saathi call screen. Big, calm, high-contrast: built for someone who doesn't use computers much. */
+:root {
+  --night-1: #1d1530;
+  --night-2: #2e1d3f;
+  --night-3: #46243f;
+  --text: #fff8ef;
+  --muted: #d9c9de;
+  --saffron: #f2a541;
+  --saffron-deep: #d9822b;
+  --green: #2fb36f;
+  --green-deep: #1f8d53;
+  --red: #e0463e;
+  --glass: rgba(255, 255, 255, 0.09);
+  --glass-strong: rgba(255, 255, 255, 0.16);
+  --font: "Nirmala UI", "Noto Sans Devanagari", "Kohinoor Devanagari", "Mangal", system-ui, sans-serif;
+  --caption: 30px;
+  --label: 20px;
+}
+body.size-normal { --caption: 24px; --label: 17px; }
+body.size-huge   { --caption: 38px; --label: 23px; }
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  font-family: var(--font);
+  color: var(--text);
+  background: radial-gradient(120% 90% at 50% 10%, var(--night-3) 0%, var(--night-2) 45%, var(--night-1) 100%);
+  overflow: hidden;
+}
+
+.call { height: 100%; display: grid; grid-template-rows: auto 1fr auto; padding: 18px 24px 22px; gap: 8px; }
+
+/* ---- top bar, like a video call ---- */
+.topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.who { display: flex; align-items: center; gap: 12px; font-size: 22px; font-weight: 600; }
+.live-dot { width: 12px; height: 12px; border-radius: 50%; background: #6f6680; }
+body.in-call .live-dot { background: var(--green); box-shadow: 0 0 0 0 rgba(47,179,111,.7); animation: live 2s infinite; }
+@keyframes live { 70% { box-shadow: 0 0 0 10px rgba(47,179,111,0); } 100% { box-shadow: 0 0 0 0 rgba(47,179,111,0); } }
+.timer { font-variant-numeric: tabular-nums; font-weight: 400; color: var(--muted); font-size: 19px; }
+.privacy { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px;
+  background: var(--glass); color: var(--muted); font-size: 16px; }
+.privacy svg { width: 18px; height: 18px; fill: currentColor; }
+
+/* ---- avatar ---- */
+.stage { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; min-height: 0; }
+.avatar-wrap { position: relative; width: min(42vh, 330px); aspect-ratio: 1; }
+.avatar { position: relative; width: 100%; height: 100%; border-radius: 50%; z-index: 1;
+  box-shadow: 0 20px 60px rgba(0,0,0,.35); animation: breathe 6s ease-in-out infinite; }
+@keyframes breathe { 50% { transform: translateY(-4px) scale(1.01); } }
+.ring { position: absolute; inset: -14px; border-radius: 50%; border: 6px solid transparent; transition: border-color .3s, transform .08s linear; }
+.avatar-wrap[data-phase="speaking"] .ring { border-color: rgba(242,165,65,.85); animation: pulse 1.6s ease-in-out infinite; }
+.avatar-wrap[data-phase="listening"] .ring { border-color: rgba(47,179,111,.95); }
+.avatar-wrap[data-phase="thinking"] .ring { border-color: rgba(255,255,255,.35); border-style: dashed; animation: spin 6s linear infinite; }
+@keyframes pulse { 50% { transform: scale(1.04); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.skin { fill: #c98d65; }
+.hair { fill: #2a1a14; }
+.kurta { fill: #2b7a78; }
+.avatar.bhaiya .kurta { fill: #3d5a99; }
+.dupatta { fill: #e2574c; opacity: .92; }
+.earring { fill: #f6c544; }
+.bindi { fill: #c0262d; }
+.brow { fill: none; stroke: #2a1a14; stroke-width: 4; stroke-linecap: round; }
+.nose { fill: none; stroke: #a5694a; stroke-width: 3; stroke-linecap: round; }
+.cheek { fill: #e07b6a; opacity: .28; }
+.moustache { fill: #2a1a14; }
+.avatar.didi .only-bhaiya, .avatar.bhaiya .only-didi { display: none; }
+.lid { fill: #c98d65; transform-box: fill-box; transform-origin: center top; transform: scaleY(0); animation: blink 5.5s infinite; }
+@keyframes blink { 0%, 94%, 100% { transform: scaleY(0); } 96% { transform: scaleY(1); } }
+
+/* ---- status and captions ---- */
+.status { margin: 0; min-height: 1.4em; font-size: calc(var(--label) + 2px); color: var(--muted); letter-spacing: .02em; }
+.status .dots::after { content: "…"; animation: dots 1.4s steps(4) infinite; display: inline-block; width: 1.2em; text-align: left; overflow: hidden; vertical-align: bottom; }
+@keyframes dots { 0% { width: 0; } 100% { width: 1.2em; } }
+.captions { width: min(980px, 100%); text-align: center; display: grid; gap: 8px; }
+.captions p { margin: 0; }
+.you { font-size: calc(var(--caption) * .7); color: var(--muted); min-height: 1.3em; }
+.you:not(:empty)::before { content: "आप: "; opacity: .7; }
+.saathi { font-size: var(--caption); line-height: 1.45; font-weight: 600; min-height: 2.9em;
+  padding: 14px 22px; border-radius: 22px; background: var(--glass); text-wrap: balance; }
+.saathi:empty { background: transparent; }
+
+/* ---- big buttons ---- */
+.dock { display: flex; justify-content: center; gap: clamp(14px, 3vw, 40px); flex-wrap: wrap; }
+.btn { all: unset; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 8px;
+  color: var(--text); font-size: var(--label); min-width: 108px; text-align: center; }
+.btn .icon { width: 92px; height: 92px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--glass-strong); transition: transform .15s, background .2s; }
+.btn .icon svg { width: 42px; height: 42px; fill: currentColor; }
+.btn:hover .icon { transform: translateY(-2px); background: rgba(255,255,255,.24); }
+.btn:focus-visible .icon { outline: 4px solid var(--saffron); outline-offset: 4px; }
+.btn.mic .icon { background: var(--green); width: 112px; height: 112px; }
+.btn.mic .icon svg { width: 52px; height: 52px; }
+.btn.mic.active .icon { background: #fff; color: var(--green-deep); box-shadow: 0 0 0 8px rgba(47,179,111,.35); }
+.btn.end .icon { background: var(--red); }
+.btn.end .icon svg { transform: rotate(135deg); }
+.btn[disabled] { opacity: .35; cursor: default; pointer-events: none; }
+
+.family-link { position: fixed; left: 16px; bottom: 10px; color: rgba(255,255,255,.35); font-size: 14px; text-decoration: none; }
+.family-link:hover { color: var(--muted); text-decoration: underline; }
+
+/* ---- overlays ---- */
+.overlay { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(20, 12, 30, .72); backdrop-filter: blur(6px); z-index: 10; padding: 24px; }
+.overlay[hidden] { display: none; }
+.sheet { width: min(640px, 100%); text-align: center; padding: 36px 32px; border-radius: 30px; background: rgba(46, 29, 63, .92); box-shadow: 0 30px 80px rgba(0,0,0,.45); }
+.hello { font-size: 44px; font-weight: 700; margin: 0 0 8px; }
+.sub { font-size: 24px; color: var(--muted); margin: 0 0 28px; }
+.big-green { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 16px; padding: 24px 46px; border-radius: 999px;
+  background: var(--green); color: #fff; font-size: 32px; font-weight: 700; box-shadow: 0 12px 30px rgba(47,179,111,.4); }
+.big-green svg { width: 38px; height: 38px; fill: currentColor; }
+.big-green:hover { background: var(--green-deep); }
+.big-green:focus-visible { outline: 5px solid var(--saffron); outline-offset: 5px; }
+.setup-warning { margin: 24px 0 0; font-size: 16px; color: #ffd28a; line-height: 1.5; }
+.big-button { all: unset; cursor: pointer; padding: 16px 40px; border-radius: 999px; background: var(--saffron); color: #2a1709; font-size: 26px; font-weight: 700; }
+.big-button:focus-visible { outline: 4px solid #fff; outline-offset: 4px; }
+
+.alert-card { border: 4px solid var(--red); }
+.alert-card.scam { border-color: var(--saffron); }
+.alert-title { font-size: 34px; font-weight: 800; margin: 0 0 12px; }
+.alert-body { font-size: 24px; line-height: 1.5; margin: 0 0 16px; }
+.alert-phone { font-size: 40px; font-weight: 800; letter-spacing: .04em; margin: 0 0 24px; color: #ffe1b0; }
+.alert-phone:empty { display: none; }
+
+dialog { border: 0; border-radius: 26px; padding: 0; width: min(720px, 92vw); background: #2e1d3f; color: var(--text); }
+dialog::backdrop { background: rgba(10, 6, 16, .7); }
+.type-form { display: grid; gap: 16px; padding: 28px; }
+.type-form label { font-size: 26px; font-weight: 600; }
+.type-form textarea { font: inherit; font-size: 28px; padding: 14px 18px; border-radius: 16px; border: 2px solid rgba(255,255,255,.25); background: #1d1530; color: var(--text); resize: vertical; }
+.type-actions { display: flex; justify-content: flex-end; gap: 16px; align-items: center; }
+.plain { all: unset; cursor: pointer; font-size: 22px; color: var(--muted); padding: 12px 18px; }
+
+@media (max-height: 700px) {
+  .avatar-wrap { width: min(34vh, 260px); }
+  .btn .icon { width: 76px; height: 76px; }
+  .btn.mic .icon { width: 92px; height: 92px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .avatar, .ring, .lid, .live-dot { animation: none !important; }
+}

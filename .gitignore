@@ -1,0 +1,8 @@
+# Personal data and downloaded models stay on the computer, never in git
+data/
+models/
+.venv/
+__pycache__/
+*.pyc
+*.tmp
+.pytest_cache/
