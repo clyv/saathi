@@ -1,7 +1,7 @@
 """Saathi's brain: builds the prompt and talks to Gemma through a local Ollama server.
 
-Gemma does every "thinking" job: it hears her (audio in), talks with her, and decides what to
-remember.
+Gemma does every "thinking" job: it hears her (audio in), looks at what she shows the camera
+(image in), talks with her, and decides what to remember.
 
 Nothing here calls the internet. Ollama runs on the same laptop (http://127.0.0.1:11434).
 """
@@ -156,8 +156,14 @@ HOW TO BE
 - If you did not understand, kindly ask {p['her_obj']} to say it again.
 
 WHAT YOU CAN AND CANNOT DO
-- You can talk, listen and remember.
-- You cannot play songs or videos, make phone calls, send messages, set alarms or reminders, or look anything up on the internet. Never offer to do these things. If {p['she']} asks, say so kindly and suggest asking family, or just chat about it (for example, ask which song {p['she']} likes and why)."""
+- You can talk, listen, remember, and look at something when {p['she']} holds it up to the laptop camera.
+- You cannot play songs or videos, make phone calls, send messages, set alarms or reminders, or look anything up on the internet. Never offer to do these things. If {p['she']} asks, say so kindly and suggest asking family, or just chat about it (for example, ask which song {p['she']} likes and why).
+
+WHEN {p['She'].upper()} SHOWS YOU SOMETHING ON THE CAMERA
+- Say warmly what you see in one short sentence, then ask {p['her_obj']} one question about it. If you are not sure what it is, say so and ask.
+- Never guess who a person in a photo is; ask {p['her_obj']}.
+- If it is a message or letter asking for an OTP, PIN, bank details or money, or threatening arrest, clearly tell {p['her_obj']} it looks like a fraud and not to reply or share anything.
+- If it is a medicine, do not say what it is for or how to take it; suggest {p['she']} ask the doctor or family."""
 
 
 def greeting_instruction(profile: dict, has_new_messages: bool) -> str:
@@ -196,6 +202,16 @@ Return exactly this JSON shape: {{"memories": ["...", "..."]}}. Return {{"memori
     return [{"role": "system", "content": MEMORY_SYSTEM}, {"role": "user", "content": prompt}]
 
 
+def showing_note(profile: dict, words: str) -> str:
+    """The user turn that goes with a camera picture."""
+    p = pronouns(profile)
+    # The rules are repeated here, next to the picture: with them only in the system prompt,
+    # Gemma once told her a cartoon of a man was "your own photo".
+    note = (f"({p['She']} is holding this up to the laptop camera for you to see. Say what you see. "
+            f"If there is a person in it, do not guess who it is, not even {p['her_obj']}; ask.)")
+    return f"{note} {words}" if words else note
+
+
 def alert_note(kind: str, profile: dict) -> str:
     """Added to her words when the keyword check fires, so Gemma says what the card shows."""
     p = pronouns(profile)
@@ -211,6 +227,9 @@ def alert_note(kind: str, profile: dict) -> str:
             f"warning. Begin your reply by telling {p['her_obj']} clearly not to share any OTP, PIN or bank "
             f"details and to check with {who} first.)")
 
+
+# What the call screen shows as her side of the conversation when she shows a picture.
+SHOWED_PICTURE = "(कैमरे पर कुछ दिखाया)"
 
 # Gemma 4 E2B/E4B can hear. The instruction goes in the system turn: when it was in the user
 # turn, Gemma "transcribed" the instruction itself whenever the audio was silent.

@@ -76,6 +76,8 @@
             <path class="moustache only-bhaiya" d="M104 140q8-6 16-2q8-4 16 2q-8 3-16 0q-8 3-16 0Z"/>
           </g>
         </svg>
+        <!-- what she showed on the camera, pinned beside the face while Saathi talks about it -->
+        <img class="shown" id="shownPhoto" alt="आपने जो दिखाया" hidden>
       </div>
 
       <p class="status" id="status" aria-live="polite">&nbsp;</p>
@@ -90,6 +92,10 @@
       <button class="btn mic" id="micBtn" disabled>
         <span class="icon"><svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm6-3a1 1 0 1 0-2 0 4 4 0 0 1-8 0 1 1 0 1 0-2 0 6 6 0 0 0 5 5.9V20H8a1 1 0 1 0 0 2h8a1 1 0 1 0 0-2h-3v-2.1a6 6 0 0 0 5-5.9Z"/></svg></span>
         <span class="label" id="micLabel">बोलिए</span>
+      </button>
+      <button class="btn" id="showBtn" disabled hidden>
+        <span class="icon"><svg viewBox="0 0 24 24"><path d="M9 4h6l1.6 2H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3.4L9 4Zm3 4.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Zm0 2a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Z"/></svg></span>
+        <span class="label">दिखाइए</span>
       </button>
       <button class="btn" id="typeBtn" disabled>
         <span class="icon"><svg viewBox="0 0 24 24"><path d="M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Zm1 3v2h2V9H5Zm4 0v2h2V9H9Zm4 0v2h2V9h-2Zm4 0v2h2V9h-2ZM7 13v2h10v-2H7Z"/></svg></span>
@@ -119,6 +125,22 @@
       </button>
       <p class="ready" id="readyNote" aria-live="polite"></p>
       <p class="setup-warning" id="setupWarning" hidden></p>
+    </div>
+  </div>
+
+  <!-- "दिखाइए": she holds something up to the laptop camera; it takes the picture by itself -->
+  <div class="overlay camera-overlay" id="camera" hidden>
+    <div class="camera-sheet">
+      <p class="camera-hint">जो दिखाना है, कैमरे के सामने रखिए</p>
+      <div class="viewfinder">
+        <video id="camVideo" autoplay playsinline muted></video>
+        <span class="countdown" id="countdown"></span>
+        <span class="flash" id="flash"></span>
+      </div>
+      <div class="camera-actions">
+        <button type="button" class="plain" id="camCancel">रहने दीजिए</button>
+        <button type="button" class="big-button" id="camTake">अभी लीजिए</button>
+      </div>
     </div>
   </div>
 

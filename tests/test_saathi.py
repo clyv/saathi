@@ -190,6 +190,25 @@ def test_speech_endpoints_fall_back_cleanly(client):
     assert r.status_code == 503 and r.json()["error"] == "stt_unavailable"
 
 
+def test_she_shows_something_on_the_camera(client):
+    photo = "data:image/jpeg;base64," + base64.b64encode(b"pretend this is a jpeg").decode()
+    evs = events(client.post("/api/chat", json={"image": photo}))
+    sent = fake_ollama.REQUESTS[-1]["messages"][-1]
+    assert sent["images"] == [photo.split(",", 1)[1]]
+    assert "holding this up to the laptop camera" in sent["content"]
+    # Gemma read a fraud SMS in the picture, so the scam card follows the reply.
+    assert [e["kind"] for e in evs if e["type"] == "alert"] == ["scam"] and evs[-1]["type"] == "done"
+    # The picture is never stored: history keeps a note instead, and the next turn has no image.
+    client.post("/api/chat", json={"text": "हाँ, यही मैसेज आया था"})
+    later = fake_ollama.REQUESTS[-1]["messages"]
+    assert not any(m.get("images") for m in later)
+    assert any(brain.SHOWED_PICTURE in m["content"] for m in later if m["role"] == "user")
+
+
+def test_bad_pictures_are_refused(client):
+    assert client.post("/api/chat", json={"image": "not a picture!"}).status_code == 400
+    assert client.post("/api/chat", json={"text": "  "}).status_code == 400
+
 
 def test_memories_and_messages_get_relative_dates():
     today = date(2026, 10, 3)

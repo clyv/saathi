@@ -1,10 +1,12 @@
 """Saathi server. Run:  python server.py   then open http://127.0.0.1:8765
 
-Everything runs on this computer: Gemma through Ollama hears, thinks and remembers;
+Everything runs on this computer: Gemma through Ollama hears, sees, thinks and remembers;
 Piper speaks; Whisper is the fallback for listening.
 """
 import argparse
 import asyncio
+import base64
+import binascii
 import json
 import os
 import tempfile
@@ -114,7 +116,10 @@ def _alternate(messages: list[dict]) -> list[dict]:
     out = []
     for m in messages:
         if out and out[-1]["role"] == m["role"] and m["role"] != "system":
-            out[-1] = {"role": m["role"], "content": out[-1]["content"] + "\n" + m["content"]}
+            merged = {**out[-1], "content": out[-1]["content"] + "\n" + m["content"]}
+            if m.get("images"):
+                merged["images"] = out[-1].get("images", []) + m["images"]
+            out[-1] = merged
         else:
             out.append(dict(m))
     return out
@@ -155,7 +160,7 @@ def _maybe_extract(cfg: dict, force: bool = False) -> None:
         _spawn(_extract_memories(chunk))
 
 
-def _reply(user_text: str = "", greeting: bool = False) -> StreamingResponse:
+def _reply(user_text: str = "", greeting: bool = False, image: str | None = None) -> StreamingResponse:
     s = settings.load()
     cfg, profile = s["config"], s["profile"]
     family = _relevant_family_messages()
@@ -165,13 +170,17 @@ def _reply(user_text: str = "", greeting: bool = False) -> StreamingResponse:
                  "content": brain.system_prompt(profile, memory.memories(), family, datetime.now())}]
     messages += memory.recent_messages(cfg["history_messages"], cfg["history_hours"])
     alert = safety.check(user_text) if user_text else None
-    if user_text:
+    if image:
+        # The picture goes to Gemma for this turn only; history keeps a note, never the image.
+        messages.append({"role": "user", "content": brain.showing_note(profile, user_text), "images": [image]})
+    elif user_text:
         # When the keyword check fires, Gemma is told too, so its voice matches the card on screen.
         note = f"\n\n{brain.alert_note(alert, profile)}" if alert else ""
         messages.append({"role": "user", "content": user_text + note})
     if greeting:
         messages.append({"role": "user", "content": brain.greeting_instruction(profile, bool(new_ids))})
     messages = _alternate(messages)
+    said = f"{brain.SHOWED_PICTURE} {user_text}".strip() if image else user_text
 
     async def generate():
         if alert:
@@ -185,14 +194,17 @@ def _reply(user_text: str = "", greeting: bool = False) -> StreamingResponse:
             yield _line({"type": "error", "code": err.code, "detail": err.detail[:400]})
             return
         reply = "".join(pieces).strip()
-        if user_text:
-            memory.add_message("user", user_text)
-            SESSION["transcript"].append({"role": "user", "content": user_text})
+        if said:
+            memory.add_message("user", said)
+            SESSION["transcript"].append({"role": "user", "content": said})
         memory.add_message("assistant", reply)
         SESSION["transcript"].append({"role": "assistant", "content": reply})
         if greeting:
             memory.mark_delivered(new_ids)
         _maybe_extract(cfg)
+        # A picture of a fraud SMS has no words of hers to check, so check what Gemma read in it.
+        if image and not alert and safety.check(reply) == "scam":
+            yield _line(_alert_payload("scam", profile))
         yield _line({"type": "done", "text": reply})
 
     return StreamingResponse(generate(), media_type="application/x-ndjson",
@@ -200,8 +212,21 @@ def _reply(user_text: str = "", greeting: bool = False) -> StreamingResponse:
 
 
 class ChatIn(BaseModel):
-    text: str
+    text: str = ""
+    image: str | None = None      # a camera snapshot: base64 JPEG (a data: URL is fine too)
 
+
+def _clean_image(image: str | None) -> str | None:
+    if not image:
+        return None
+    b64 = image.split(",", 1)[1] if image.startswith("data:") else image
+    if len(b64) > 8_000_000:
+        raise HTTPException(413, "picture too large")
+    try:
+        base64.b64decode(b64, validate=True)
+    except (binascii.Error, ValueError) as err:
+        raise HTTPException(400, "picture is not valid base64") from err
+    return b64
 
 
 @app.post("/api/greet")
@@ -215,9 +240,10 @@ async def greet():
 @app.post("/api/chat")
 async def chat(body: ChatIn):
     text = body.text.strip()[:2000]
-    if not text:
+    image = _clean_image(body.image)
+    if not text and not image:
         raise HTTPException(400, "empty message")
-    return _reply(user_text=text)
+    return _reply(user_text=text, image=image)
 
 
 @app.post("/api/session/end")

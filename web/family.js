@@ -31,6 +31,11 @@ async function refreshStatus() {
   } else {
     items.push(["bad", `Nothing can listen yet: <code>${esc(st.ollama.model)}</code> can't take audio and Whisper isn't downloaded. Use <code>gemma4:e4b</code> or <code>e2b</code>, or run <code>python scripts/setup.py</code>.`]);
   }
+  if (st.ollama.model_present) {
+    items.push(st.ollama.sees
+      ? ["ok", "Seeing: they can show Saathi things on the laptop camera (the दिखाइए button). Pictures are never saved."]
+      : ["warn", `<code>${esc(st.ollama.model)}</code> can't see pictures, so the दिखाइए button is hidden.`]);
+  }
   items.push(st.tts.available
     ? ["ok", `Hindi voice installed: <code>${esc(st.tts.voice)}</code>.`]
     : ["warn", `Voice <code>${esc(st.tts.voice)}</code> is not installed. Saathi will try the browser's Hindi voice. Run <code>python scripts/setup.py</code>.`]);

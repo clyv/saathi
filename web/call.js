@@ -10,6 +10,7 @@ const NO_SPEECH_MS = 10000;   // stop listening if she says nothing for this lon
 const END_SILENCE_MS = 1600;  // a pause this long means she has finished speaking
 const MIN_SPEECH_MS = 250;    // ignore shorter blips (a cough, a door)
 const MAX_LISTEN_MS = 30000;   // Gemma hears clips of up to about 30 seconds
+const CAMERA_COUNTDOWN = 5;   // seconds to hold something up before the picture is taken
 const KEEP_WARM_MS = 10 * 60 * 1000;   // while this window is open, keep Gemma loaded
 
 const S = {
@@ -21,6 +22,7 @@ const S = {
   ttsMode: "piper",             // piper -> browser -> none (falls back automatically)
   rec: null, recInfo: null, vadTimer: null, missedHeard: 0,
   callStart: 0, timer: null,
+  cam: null, camTimer: null, hasCamera: false, photoTurns: 0,
 };
 
 const female = () => (S.settings?.profile?.avatar || "bhaiya") === "didi";
@@ -53,6 +55,7 @@ async function checkSetup() {
     $("setupWarning").hidden = false;
     $("setupWarning").textContent = "For family: " + notes.join(" ");
   }
+  $("showBtn").hidden = !(st.ollama.sees && S.hasCamera);
 }
 
 /** Gemma takes a while to load into memory. Show it on the start screen, but never block the button. */
@@ -120,6 +123,7 @@ function setPhase(phase, statusHtml) {
   const inCall = phase !== "precall" && phase !== "ended";
   mic.disabled = !inCall || !S.micAvailable;
   $("typeBtn").disabled = !inCall;
+  $("showBtn").disabled = !inCall;
   $("endBtn").disabled = !inCall;
   $("repeatBtn").disabled = !inCall || S.lastSentences.length === 0;
 }
@@ -250,9 +254,11 @@ function sayLocal(text, { listenAfter = true } = {}) {
 }
 
 // --------------------------------------------------------- talking to Gemma ----
-async function talk(url, payload, { prelude = "" } = {}) {
+async function talk(url, payload, { prelude = "", photo = false } = {}) {
   stopSpeaking();
   stopListening(true);
+  if (photo) S.photoTurns = 2;                              // keep it pinned while she answers about it
+  else if (--S.photoTurns < 0) $("shownPhoto").hidden = true;
   const gen = ++S.generation;
   const ctrl = new AbortController();
   S.abort = ctrl;
@@ -450,6 +456,7 @@ async function startCall() {
   S.timer = setInterval(tickTimer, 1000);
   $("youCaption").textContent = "";
   $("saathiCaption").textContent = "";
+  $("shownPhoto").hidden = true;
   setPhase("thinking");
   const cold = S.status && S.status.ollama?.reachable && !S.status.ollama.loaded;
   const hello = `नमस्ते ${S.settings?.address || ""}! बस एक मिनट, मैं आ ${myVerb("रहा", "रही")} हूँ।`.replace("नमस्ते आप!", "नमस्ते!");
@@ -457,6 +464,7 @@ async function startCall() {
 }
 
 function endCall() {
+  closeCamera();
   stopSpeaking();
   stopListening(true);
   setPhase("ended");
@@ -482,6 +490,70 @@ function openTyping() {
   $("typeInput").value = "";
   $("typeDialog").showModal();
   $("typeInput").focus();
+}
+
+// ------------------------------------------------------------ "दिखाइए" ----
+async function detectCamera() {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    S.hasCamera = devices.some((d) => d.kind === "videoinput");
+  } catch { S.hasCamera = false; }
+}
+
+async function openCamera() {
+  stopListening(true);
+  stopSpeaking();
+  try {
+    S.cam = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 960 } } });
+  } catch {
+    sayLocal("माफ़ कीजिए, कैमरा नहीं खुल पाया। आप मुझे बोलकर बता दीजिए।");
+    return;
+  }
+  $("camVideo").srcObject = S.cam;
+  $("camera").hidden = false;
+  setPhase("idle", "&nbsp;");
+  sayLocal(`ठीक है, दिखाइए! मैं देख ${myVerb("रहा", "रही")} हूँ।`, { listenAfter: false });
+  let left = CAMERA_COUNTDOWN;
+  $("countdown").textContent = left;
+  S.camTimer = setInterval(() => {
+    left -= 1;
+    if (left <= 0) takePicture();
+    else $("countdown").textContent = left;
+  }, 1000);
+}
+
+function closeCamera() {
+  clearInterval(S.camTimer);
+  S.camTimer = null;
+  if (S.cam) S.cam.getTracks().forEach((t) => t.stop());   // the camera light goes off straight away
+  S.cam = null;
+  $("camVideo").srcObject = null;
+  $("camera").hidden = true;
+  $("countdown").textContent = "";
+}
+
+function takePicture() {
+  const video = $("camVideo");
+  clearInterval(S.camTimer);
+  S.camTimer = null;
+  if (!S.cam || !video.videoWidth) { closeCamera(); return; }
+  const scale = Math.min(1, 896 / Math.max(video.videoWidth, video.videoHeight));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(video.videoWidth * scale);
+  canvas.height = Math.round(video.videoHeight * scale);
+  canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+  const image = canvas.toDataURL("image/jpeg", 0.85);
+  $("countdown").textContent = "";
+  $("flash").classList.remove("go");
+  void $("flash").offsetWidth;                  // restart the flash animation
+  $("flash").classList.add("go");
+  setTimeout(() => {
+    closeCamera();
+    $("shownPhoto").src = image;
+    $("shownPhoto").hidden = false;
+    $("youCaption").textContent = "(तस्वीर दिखाई)";
+    talk("/api/chat", { image }, { photo: true });
+  }, 350);
 }
 
 // --------------------------------------------------------------- animation ----
@@ -512,6 +584,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   setInterval(keepWarm, KEEP_WARM_MS);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) keepWarm(); });
   try { await loadSettings(); } catch { $("helloSub").textContent = "Saathi का सर्वर नहीं मिल रहा।"; }
+  await detectCamera();
   await checkSetup();
   setPhase("precall");
   watchReady();
@@ -522,6 +595,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   $("endBtn").addEventListener("click", endCall);
   $("micBtn").addEventListener("click", onMicButton);
   $("typeBtn").addEventListener("click", openTyping);
+  $("showBtn").addEventListener("click", openCamera);
+  $("camTake").addEventListener("click", takePicture);
+  $("camCancel").addEventListener("click", () => { closeCamera(); finishedSpeaking(); });
   $("repeatBtn").addEventListener("click", () => {
     const lines = [...S.lastSentences];
     stopListening(true);
@@ -542,7 +618,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     if (!confirm("यह पेज परिवार वालों के लिए है। खोलें?")) e.preventDefault();
   });
   document.addEventListener("keydown", (e) => {
-    if (e.code === "Space" && !$("typeDialog").open && !$("micBtn").disabled && document.activeElement.tagName !== "TEXTAREA") {
+    if (e.code === "Space" && !$("typeDialog").open && $("camera").hidden && !$("micBtn").disabled && document.activeElement.tagName !== "TEXTAREA") {
       e.preventDefault();
       onMicButton();
     }

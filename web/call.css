@@ -66,6 +66,13 @@ body.in-call .live-dot { background: var(--green); box-shadow: 0 0 0 0 rgba(47,1
 .cheek { fill: #e07b6a; opacity: .28; }
 .moustache { fill: #2a1a14; }
 .avatar.didi .only-bhaiya, .avatar.bhaiya .only-didi { display: none; }
+
+/* what she showed on the camera: a photo pinned to the call, like one shared in a video call */
+.shown { position: absolute; right: -38%; bottom: -4%; width: 62%; z-index: 2; border-radius: 14px;
+  border: 6px solid #fff8ef; box-shadow: 0 16px 40px rgba(0,0,0,.45); transform: rotate(4deg);
+  animation: pin .35s ease-out; }
+.shown[hidden] { display: none; }
+@keyframes pin { from { transform: rotate(12deg) scale(.6); opacity: 0; } }
 .lid { fill: #c98d65; transform-box: fill-box; transform-origin: center top; transform: scaleY(0); animation: blink 5.5s infinite; }
 @keyframes blink { 0%, 94%, 100% { transform: scaleY(0); } 96% { transform: scaleY(1); } }
 
@@ -117,6 +124,18 @@ body.in-call .live-dot { background: var(--green); box-shadow: 0 0 0 0 rgba(47,1
   border: 3px solid rgba(255,255,255,.25); border-top-color: var(--saffron); border-radius: 50%; animation: spin 1s linear infinite; }
 .ready.ok::before { content: "● "; color: var(--green); }
 
+/* ---- camera ("दिखाइए") ---- */
+.camera-sheet { width: min(860px, 100%); display: grid; gap: 18px; justify-items: center; }
+.camera-hint { margin: 0; font-size: 30px; font-weight: 700; text-align: center; }
+.viewfinder { position: relative; width: 100%; aspect-ratio: 4 / 3; max-height: 62vh; border-radius: 26px; overflow: hidden;
+  background: #000; border: 5px solid var(--saffron); box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+.viewfinder video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }  /* mirror, like a self-view */
+.countdown { position: absolute; inset: 0; display: grid; place-items: center; font-size: 160px; font-weight: 800;
+  color: #fff; text-shadow: 0 6px 30px rgba(0,0,0,.6); pointer-events: none; }
+.flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+.flash.go { animation: flash .45s ease-out; }
+@keyframes flash { 0% { opacity: .9; } 100% { opacity: 0; } }
+.camera-actions { display: flex; gap: 20px; align-items: center; }
 .big-button { all: unset; cursor: pointer; padding: 16px 40px; border-radius: 999px; background: var(--saffron); color: #2a1709; font-size: 26px; font-weight: 700; }
 .big-button:focus-visible { outline: 4px solid #fff; outline-offset: 4px; }
 
@@ -140,6 +159,12 @@ dialog::backdrop { background: rgba(10, 6, 16, .7); }
   .btn .icon { width: 76px; height: 76px; }
   .btn.mic .icon { width: 92px; height: 92px; }
 }
+@media (max-width: 760px) {
+  .btn { min-width: 84px; }
+  .btn .icon { width: 72px; height: 72px; }
+  .btn.mic .icon { width: 86px; height: 86px; }
+  .shown { right: -10%; width: 50%; }
+}
 @media (prefers-reduced-motion: reduce) {
-  .avatar, .ring, .lid, .live-dot, .ready::before { animation: none !important; }
+  .avatar, .ring, .lid, .live-dot, .shown, .ready::before { animation: none !important; }
 }

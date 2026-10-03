@@ -11,6 +11,7 @@ WARMUPS: list[dict] = []           # every /api/generate body
 LOADED: set[str] = set()
 REPLY = "नमस्ते मौसी जी! आज आपका दिन कैसा रहा? क्या आपने खाना खा लिया।"
 HEARD = "आज मैंने खीर बनाई"
+SAW = "अरे, यह तो बैंक के नाम से मैसेज है जो OTP माँग रहा है। यह फ्रॉड लगता है, किसी को मत बताइए।"
 
 
 @app.get("/api/tags")
@@ -64,4 +65,6 @@ async def chat(request: Request):
         return {"message": {"role": "assistant",
                             "content": json.dumps({"memories": ["मौसी जी ने आलू के पराठे बनाए।"]},
                                                   ensure_ascii=False)}, "done": True}
+    if messages[-1].get("images"):
+        return _stream(SAW)
     return _stream(REPLY)
