@@ -1,10 +1,22 @@
-# साथी · Saathi
+<p align="center"><img src="docs/icon.png" width="88" alt=""></p>
 
-**An offline Hindi voice companion for someone you love.** Saathi looks and feels like a video call: a friendly face, big buttons, and a voice that talks in everyday Hindi. It remembers what you told it last time, passes on messages from family, looks at whatever you hold up to the camera, and shows emergency numbers if something sounds wrong.
+<h1 align="center">साथी · Saathi</h1>
 
-Everything runs on one laptop. No accounts, no cloud, no monthly bill, and nothing leaves the house.
+<p align="center"><b>An offline Hindi video-call companion for someone you love.</b><br>
+Gemma 4 hears her, sees what she holds up to the camera, and talks with her in everyday Hindi.<br>
+All on her laptop: no accounts, no cloud, no monthly bill, and nothing leaves the house.</p>
 
-![Saathi call screen](docs/call-screen.png)
+<p align="center">
+  <img alt="Runs offline" src="https://img.shields.io/badge/runs-offline-2fb36f">
+  <img alt="Gemma 4 E4B" src="https://img.shields.io/badge/Gemma%204-E4B-f2a541">
+  <img alt="Ollama" src="https://img.shields.io/badge/Ollama-local-46243f">
+  <img alt="Hindi" src="https://img.shields.io/badge/language-%E0%A4%B9%E0%A4%BF%E0%A4%82%E0%A4%A6%E0%A5%80-e0463e">
+  <img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-3d5a99">
+</p>
+
+![Saathi call screen: she says Rahul loved it, and Saathi replies that it is glad Rahul liked her gajar halwa](docs/call-screen.png)
+
+Saathi looks and feels like a video call: a friendly face, big buttons, and a voice that talks in everyday Hindi. It remembers what she told it last time, passes on messages from family, looks at whatever she holds up to the camera, and shows emergency numbers if something sounds wrong.
 
 Built for the [DEV Hacktoberfest Weekend Challenge: Build for a Friend](https://dev.to/challenges/hacktoberfest-weekend-2026-10-01) (October 2–5, 2026).
 
@@ -37,7 +49,7 @@ One open model, [Gemma 4](https://deepmind.google/models/gemma/), does all the u
 - **A face that talks.** The mouth moves with the loudness of the voice, the eyes blink, and the ring around the face shows whether Saathi is speaking, thinking or listening.
 - **Big and simple.** Five large buttons with Hindi labels: बोलिए (speak), दिखाइए (show), लिखिए (type), फिर से सुनिए (repeat), कॉल खत्म (end call). Large Devanagari subtitles for everything.
 - **Ready when she is.** Gemma starts loading the moment the window opens, and stays loaded while it is open. If she presses the button before it's ready, Saathi says "नमस्ते! बस एक मिनट, मैं आ रहा हूँ" instead of sitting silent.
-- **It remembers.** After each call, Gemma picks out a few facts worth remembering ("मौसी जी के घुटने में दर्द था"). Next time, Saathi asks how her knee is. Facts are shown to Gemma as "कल", "परसों", "पिछले हफ़्ते", because a small model gets raw dates wrong (see below).
+- **It remembers.** After each call, Gemma picks out a few facts worth remembering ("मौसी जी के घुटने में दर्द था"). The next call opens by following up on one, health first: "कल रात आप बाथरूम में गिरी थीं, उस सब के बाद अब आप कैसी हैं?" Facts reach Gemma as "कल", "परसों", "पिछले हफ़्ते", because a small model gets raw dates wrong.
 - **Messages from family.** Leave a note on the family page ("I'll video call you on Sunday at 7"), and Saathi passes it on in its own words at the start of the next call.
 - **Correct Hindi grammar.** Saathi uses the right verb forms for her (कैसी हैं / कैसे हैं) and for itself (रही हूँ / रहा हूँ), depending on the face you pick.
 - **One icon.** The first run puts a smiling-face **साथी** shortcut on the desktop.
@@ -47,7 +59,18 @@ One open model, [Gemma 4](https://deepmind.google/models/gemma/), does all the u
 - **Scam card.** Mentions of OTPs, bank PINs, "KYC", AnyDesk or "digital arrest" show a warning not to share anything and to call family first. If she holds a suspicious SMS up to the camera, Gemma reads it, and the same card appears when its answer flags fraud.
 - **Honest about what it is.** Saathi says it is a computer companion if asked, never gives medicine advice, and gently encourages her to call family and meet friends. It is told exactly what it can't do (play songs, make calls, set reminders), so it never offers. It is meant to keep her company between calls, not to replace anyone.
 
-![Emergency card](docs/safety-card.png)
+<table>
+<tr>
+<td width="50%"><img src="docs/camera.png" alt="The दिखाइए camera view with a countdown, showing a phone with a fraud SMS"><br><sub><b>दिखाइए:</b> she holds something up; the picture is taken by itself.</sub></td>
+<td width="50%"><img src="docs/show-me.png" alt="The SMS pinned beside Saathi's face while Saathi says it looks like a bank message"><br><sub>Gemma reads it, says it's a fraud, and the scam card appears.</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/safety-card.png" alt="Emergency card with the son's phone number and 112 in large text"><br><sub>She mentions a fall: the emergency card, and Saathi says "call Rahul or 112 now".</sub></td>
+<td width="50%"><img src="docs/family-page.png" alt="Family page showing that Gemma is loaded, can hear and can see"><br><sub>The family page checks everything works offline.</sub></td>
+</tr>
+</table>
+
+<sub>Screenshots are from a demo profile with made-up names and numbers. The SMS is a made-up example.</sub>
 
 ---
 
@@ -162,7 +185,7 @@ pip install pytest
 python -m pytest -q
 ```
 
-17 tests run the real server against a small fake Ollama (`tests/fake_ollama.py`). They cover streaming replies, greetings with family messages, memory extraction and relative dates, Gemma hearing a recording (resampled to 16 kHz), a camera picture that triggers the scam card and is never stored, warm-up using the same settings as chat, the emergency and scam cards, and the friendly errors when Ollama or the model is missing.
+18 tests run the real server against a small fake Ollama (`tests/fake_ollama.py`). They cover streaming replies, greetings with family messages, memory extraction, relative dates and the greeting's follow-up, Gemma hearing a recording (resampled to 16 kHz), a camera picture that triggers the scam card and is never stored, warm-up using the same settings as chat, the emergency and scam cards, and the friendly errors when Ollama or the model is missing.
 
 ## Credits and licences
 
