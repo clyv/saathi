@@ -10,7 +10,7 @@ All on her laptop: no accounts, no cloud, no monthly bill, and nothing leaves th
   <img alt="Runs offline" src="https://img.shields.io/badge/runs-offline-2fb36f">
   <img alt="Gemma 4 E4B" src="https://img.shields.io/badge/Gemma%204-E4B-f2a541">
   <img alt="Ollama" src="https://img.shields.io/badge/Ollama-local-46243f">
-  <img alt="Hindi" src="https://img.shields.io/badge/language-%E0%A4%B9%E0%A4%BF%E0%A4%82%E0%A4%A6%E0%A5%80-e0463e">
+  <img alt="Hindi" src="https://img.shields.io/badge/language-Hindi-e0463e">
   <img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-3d5a99">
 </p>
 
@@ -26,12 +26,14 @@ Built for the [DEV Hacktoberfest Weekend Challenge: Build for a Friend](https://
 
 One open model, [Gemma 4](https://deepmind.google/models/gemma/), does all the understanding. It hears her, sees what she shows it, talks with her, and decides what to remember. Piper gives it a Hindi voice.
 
-```
-  her voice ──► Gemma 4 E4B ──► Gemma 4 E4B ──► Piper Hindi voice ──► speakers
-  (mic)          hears her       talks back         (speaks)
-                                    ▲    ▲
-  camera ("दिखाइए") ────────────────┘    │
-  her profile, family messages, remembered facts (local JSON files)
+```mermaid
+flowchart LR
+  mic(["her voice"]) --> hear["Gemma 4 E4B<br/>hears her"]
+  cam(["camera: दिखाइए"]) --> talk
+  hear --> talk["Gemma 4 E4B<br/>talks back"]
+  talk --> piper["Piper<br/>Hindi voice"] --> spk(["speakers"])
+  data[("her profile, family messages,<br/>remembered facts: local JSON")] --> talk
+  talk -. after the call .-> data
 ```
 
 | Part | Open-source piece | Runs on |
