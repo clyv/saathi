@@ -6,6 +6,7 @@ import sys
 import tempfile
 import threading
 import time
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -31,7 +32,7 @@ import fake_ollama  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 import server  # noqa: E402
-from saathi import safety  # noqa: E402
+from saathi import brain, safety  # noqa: E402
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -59,19 +60,34 @@ def events(resp) -> list[dict]:
 def test_status_sees_gemma(client):
     st = client.get("/api/status").json()
     assert st["ollama"]["reachable"] and st["ollama"]["model_present"]
+    assert st["ollama"]["hears"] and st["ollama"]["sees"]
     assert st["stt"]["available"] is False and st["tts"]["available"] is False
+
+
+def test_warm_up_loads_gemma_the_same_way_chat_does(client):
+    for _ in range(50):
+        if fake_ollama.WARMUPS:
+            break
+        time.sleep(0.05)
+    warm = fake_ollama.WARMUPS[0]
+    # A different num_ctx makes Ollama reload the whole model (~28 s on a laptop GPU).
+    assert warm["options"]["num_ctx"] == 8192 and warm["keep_alive"] == "30m"
+    assert client.post("/api/warmup").json() == {"ok": True}
+    assert client.get("/api/status").json()["ollama"]["loaded"] is True
 
 
 def test_settings_roundtrip(client):
     body = {"profile": {"person_name": "Sunita", "address_as": "मौसी जी", "person_gender": "female",
                         "family": [{"name": "Clivin", "relation": "nephew", "lives_in": "Dubai"}, {"name": ""}],
                         "emergency_contact_name": "Rahul", "emergency_contact_phone": "+91 98765 43210"},
-            "config": {"speech_speed": 5, "auto_listen": False, "unknown_key": 1}}
+            "config": {"speech_speed": 5, "auto_listen": False, "unknown_key": 1,
+                       "keep_alive": "forever"}}
     saved = client.put("/api/settings", json=body).json()
     assert saved["address"] == "मौसी जी"
     assert len(saved["profile"]["family"]) == 1               # empty rows dropped
     assert saved["config"]["speech_speed"] == 1.4               # clamped
     assert "unknown_key" not in saved["config"]
+    assert saved["config"]["keep_alive"] == "30m"
 
 
 def test_greeting_passes_on_family_message(client):
@@ -101,6 +117,10 @@ def test_emergency_alert_comes_first(client):
     evs = events(client.post("/api/chat", json={"text": "मेरे सीने में दर्द हो रहा है"}))
     assert evs[0]["type"] == "alert" and evs[0]["kind"] == "emergency"
     assert evs[0]["phone"] == "+91 98765 43210"
+    # Gemma is told as well, so what it says matches the card; history keeps only her words.
+    said = fake_ollama.REQUESTS[-1]["messages"][-1]["content"]
+    assert said.startswith("मेरे सीने में दर्द हो रहा है") and "+91 98765 43210" in said and "112" in said
+    assert server.memory.recent_messages(40, 1)[-2]["content"] == "मेरे सीने में दर्द हो रहा है"
 
 
 def test_safety_keywords():
@@ -129,6 +149,18 @@ def test_speech_endpoints_fall_back_cleanly(client):
     assert r.status_code == 503 and r.json()["error"] == "stt_unavailable"
 
 
+
+def test_memories_and_messages_get_relative_dates():
+    today = date(2026, 10, 3)
+    days = ("2026-10-03", "2026-10-02", "2026-10-01", "2026-09-28", "2026-09-24", "2026-09-10", "2026-08-20")
+    assert [brain.how_long_ago(d, today) for d in days] == [
+        "आज", "कल", "परसों", "5 दिन पहले", "पिछले हफ़्ते", "3 हफ़्ते पहले", "पिछले महीने"]
+    prompt = brain.system_prompt({}, [{"date": "2026-10-02", "text": "घुटने में दर्द था।"}], [],
+                                 brain.datetime(2026, 10, 3, 18, 0))
+    assert "- (कल) घुटने में दर्द था।" in prompt
+    assert "cannot play songs" in prompt                          # it once offered to play music
+
+
 def test_retries_without_think_for_older_models(client):
     client.put("/api/settings", json={"config": {"model": "nothink-model"}})
     os.environ.pop("SAATHI_MODEL", None)
@@ -147,3 +179,8 @@ def test_friendly_errors(client):
     evs = events(client.post("/api/chat", json={"text": "हेलो"}))
     os.environ["SAATHI_OLLAMA_URL"] = old
     assert evs[-1]["code"] == "ollama_offline"
+
+
+def test_keep_alive_is_sent_the_way_ollama_reads_it():
+    assert brain._keep_alive({"keep_alive": "30m"}) == "30m"
+    assert brain._keep_alive({"keep_alive": "-1"}) == -1          # forever, as a number

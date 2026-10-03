@@ -19,7 +19,8 @@ async function refreshStatus() {
   if (!st.ollama.reachable) items.push(["bad", "Ollama is not running. Install it from ollama.com and open the app (it runs in the background)."]);
   else if (!st.ollama.model_present) items.push(["bad", `Ollama is running, but <code>${esc(st.ollama.model)}</code> is not downloaded. Run <code>ollama pull ${esc(st.ollama.model)}</code> or <code>python scripts/setup.py</code>.` +
       (st.ollama.installed.length ? ` Installed: ${st.ollama.installed.map((n) => `<code>${esc(n)}</code>`).join(" ")}` : "")]);
-  else items.push(["ok", `Gemma is ready: <code>${esc(st.ollama.model)}</code> running locally in Ollama.`]);
+  else items.push(["ok", `Gemma is ready: <code>${esc(st.ollama.model)}</code> running locally in Ollama` +
+      (st.ollama.loaded ? " (loaded in memory)." : " (it loads when the call window opens).")]);
   items.push(st.stt.available
     ? ["ok", `Listening works offline (Whisper <code>${esc(st.stt.model)}</code> on ${esc(st.stt.device.toUpperCase())}).` + (st.stt.note ? ` <span class="hint">${esc(st.stt.note)}</span>` : "")]
     : ["bad", `Whisper <code>${esc(st.stt.model)}</code> is not downloaded, so Saathi can't hear. Run <code>python scripts/setup.py</code>.`]);

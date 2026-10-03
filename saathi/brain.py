@@ -3,7 +3,8 @@
 Nothing here calls the internet. Ollama runs on the same laptop (http://127.0.0.1:11434).
 """
 import json
-from datetime import datetime
+import re
+from datetime import date, datetime
 
 import httpx
 
@@ -36,6 +37,29 @@ def part_of_day(hour: int) -> str:
 def hindi_now(now: datetime) -> str:
     return (f"{DAYS[now.weekday()]}, {now.day} {MONTHS[now.month - 1]} {now.year}, "
             f"{now.strftime('%I:%M %p').lstrip('0')} ({part_of_day(now.hour)})")
+
+
+def how_long_ago(day: str, today: date) -> str:
+    """'2026-10-01' -> 'परसों'. A small model handles 'two days ago' far better than raw dates."""
+    try:
+        days = (today - date.fromisoformat(day)).days
+    except (TypeError, ValueError):
+        return day or ""
+    if days <= 0:
+        return "आज"
+    if days == 1:
+        return "कल"
+    if days == 2:
+        return "परसों"
+    if days < 7:
+        return f"{days} दिन पहले"
+    if days < 14:
+        return "पिछले हफ़्ते"
+    if days < 30:
+        return f"{days // 7} हफ़्ते पहले"
+    if days < 60:
+        return "पिछले महीने"
+    return f"{days // 30} महीने पहले"
 
 
 # ------------------------------------------------------------------ prompts ----
@@ -80,13 +104,16 @@ def system_prompt(profile: dict, memories: list[dict], family_msgs: list[dict], 
     about_text = "\n".join(about) if about else (
         f"(The family has not filled this in yet. Get to know {p['her_obj']} gently.)")
 
-    mem_text = "\n".join(f"- ({m['date']}) {m['text']}" for m in memories[-15:]) or "- (nothing yet)"
+    today = now.date()
+    mem_text = "\n".join(f"- ({how_long_ago(m['date'], today)}) {m['text']}"
+                         for m in memories[-15:]) or "- (nothing yet)"
 
     msg_lines = []
     for m in family_msgs:
         who = m["from_name"] + (f" ({m['relation']})" if m.get("relation") else "")
-        tag = "NEW, not told yet" if not m.get("delivered") else f"already told on {m['delivered']}"
-        msg_lines.append(f"- [{tag}] from {who}, written {m['created']}: {m['text']}")
+        tag = ("NEW, not told yet" if not m.get("delivered") else
+               f"already told {how_long_ago(m['delivered'], today)}")
+        msg_lines.append(f"- [{tag}] from {who}, written {how_long_ago(m['created'], today)}: {m['text']}")
     msg_text = "\n".join(msg_lines) or "- (none)"
 
     contact = profile.get("emergency_contact_name") or f"{p['her']} family"
@@ -107,7 +134,7 @@ LANGUAGE AND STYLE
 ABOUT {p['Her'].upper()}
 {about_text}
 
-THINGS YOU REMEMBER FROM EARLIER CHATS (bring them up naturally when it fits; never recite the list)
+THINGS YOU REMEMBER FROM EARLIER CHATS (in brackets: when {p['she']} told you; bring them up naturally when it fits, never recite the list)
 {mem_text}
 
 MESSAGES FROM {p['Her'].upper()} FAMILY
@@ -122,7 +149,11 @@ HOW TO BE
 - Health: you are not a doctor. Never suggest medicines or doses. For health worries, suggest {p['she']} talk to a doctor or family. If {p['she']} mentions an emergency sign (chest pain, a fall, trouble breathing, fainting, sudden weakness, heavy bleeding, severe pain), calmly tell {p['her_obj']} to call {contact_text} or the emergency number {number} right now, before anything else.
 - Money and scams: if anyone asks {p['her_obj']} for an OTP, PIN, bank details or an urgent money transfer, or says {p['she']} is under "digital arrest", tell {p['her_obj']} clearly not to share anything and to check with family first.
 - Stay away from political arguments. If {p['she']} seems sad or lonely, be gentle, listen, and suggest talking to someone {p['she']} trusts.
-- If you did not understand, kindly ask {p['her_obj']} to say it again."""
+- If you did not understand, kindly ask {p['her_obj']} to say it again.
+
+WHAT YOU CAN AND CANNOT DO
+- You can talk, listen and remember.
+- You cannot play songs or videos, make phone calls, send messages, set alarms or reminders, or look anything up on the internet. Never offer to do these things. If {p['she']} asks, say so kindly and suggest asking family, or just chat about it (for example, ask which song {p['she']} likes and why)."""
 
 
 def greeting_instruction(profile: dict, has_new_messages: bool) -> str:
@@ -155,10 +186,26 @@ def memory_request(profile: dict, transcript: list[dict], existing: list[dict]) 
 Already remembered:
 {known}
 
-List up to 3 NEW facts about {person} from this conversation that would help in future chats: events in their life, plans, people they mentioned, how they have been feeling, things they like or dislike. Only use what {person} said, not what the companion said. Skip greetings and small talk. Do not repeat anything already remembered. Write each fact as one short sentence in simple Hindi (Devanagari), in the third person.
+List up to 3 NEW facts about {person} from this conversation that would help in future chats: events in their life, plans, people they mentioned, how they have been feeling, things they like or dislike. Only use what {person} said, not what the companion said. Skip greetings and small talk. Do not repeat anything already remembered. Write each fact as one short sentence in simple Hindi (Devanagari), in the third person. Do not use time words like आज, कल or अभी: the date is saved with each fact, and the fact will be read again days later.
 
 Return exactly this JSON shape: {{"memories": ["...", "..."]}}. Return {{"memories": []}} if there is nothing worth remembering."""
     return [{"role": "system", "content": MEMORY_SYSTEM}, {"role": "user", "content": prompt}]
+
+
+def alert_note(kind: str, profile: dict) -> str:
+    """Added to her words when the keyword check fires, so Gemma says what the card shows."""
+    p = pronouns(profile)
+    contact = profile.get("emergency_contact_name") or f"{p['her']} family"
+    phone = profile.get("emergency_contact_phone")
+    who = f"{contact} ({phone})" if phone else contact
+    number = profile.get("emergency_number") or "112"
+    if kind == "emergency":
+        return (f"(Note from the app, not from {p['her_obj']}: {p['she']} may have mentioned an emergency sign, "
+                f"and the screen is now showing the emergency numbers. Begin your reply by calmly telling "
+                f"{p['her_obj']} to call {who} or {number} right now. Then ask one gentle question.)")
+    return (f"(Note from the app, not from {p['her_obj']}: this may be a scam, and the screen is now showing a "
+            f"warning. Begin your reply by telling {p['her_obj']} clearly not to share any OTP, PIN or bank "
+            f"details and to check with {who} first.)")
 
 
 # ------------------------------------------------------------------- ollama ----
@@ -167,8 +214,20 @@ def _timeout() -> httpx.Timeout:
 
 
 def _options(cfg: dict, temperature: float | None = None) -> dict:
+    # Every request must send the same num_ctx. If one differs, Ollama reloads the whole model,
+    # which took ~28 seconds on a laptop GPU: that was why the first greeting was so slow.
     return {"temperature": cfg["temperature"] if temperature is None else temperature,
             "num_ctx": cfg["num_ctx"]}
+
+
+def _url(cfg: dict, path: str) -> str:
+    return cfg["ollama_url"].rstrip("/") + path
+
+
+def _keep_alive(cfg: dict) -> str | int:
+    """'30m' stays a duration; a bare number (e.g. -1 = forever) must be sent as a number."""
+    value = str(cfg["keep_alive"]).strip()
+    return int(value) if re.fullmatch(r"-?\d+", value) else value
 
 
 async def stream_reply(cfg: dict, messages: list[dict]):
@@ -178,14 +237,13 @@ async def stream_reply(cfg: dict, messages: list[dict]):
         "messages": messages,
         "stream": True,
         "think": False,          # a companion should answer quickly, not deliberate
-        "keep_alive": "2h",      # keep the model in memory between calls
+        "keep_alive": _keep_alive(cfg),
         "options": _options(cfg),
     }
-    url = cfg["ollama_url"].rstrip("/") + "/api/chat"
     async with httpx.AsyncClient(timeout=_timeout()) as client:
         for attempt in (1, 2):
             try:
-                async with client.stream("POST", url, json=payload) as resp:
+                async with client.stream("POST", _url(cfg, "/api/chat"), json=payload) as resp:
                     if resp.status_code != 200:
                         body = (await resp.aread()).decode("utf-8", "ignore")
                         if attempt == 1 and "think" in payload and "think" in body.lower():
@@ -210,28 +268,32 @@ async def stream_reply(cfg: dict, messages: list[dict]):
                 raise BrainError("ollama_offline", str(err)) from err
 
 
-async def complete_json(cfg: dict, messages: list[dict]) -> dict:
+async def _complete(cfg: dict, messages: list[dict], temperature: float, **extra) -> str:
+    """One non-streaming Gemma call. Returns the reply text."""
     payload = {
         "model": cfg["model"],
         "messages": messages,
         "stream": False,
         "think": False,
-        "format": "json",
-        "keep_alive": "2h",
-        "options": _options(cfg, temperature=0.2),
+        "keep_alive": _keep_alive(cfg),
+        "options": _options(cfg, temperature=temperature),
+        **extra,
     }
-    url = cfg["ollama_url"].rstrip("/") + "/api/chat"
     async with httpx.AsyncClient(timeout=_timeout()) as client:
         try:
-            resp = await client.post(url, json=payload)
+            resp = await client.post(_url(cfg, "/api/chat"), json=payload)
             if resp.status_code != 200 and "think" in resp.text.lower():
                 payload.pop("think")
-                resp = await client.post(url, json=payload)
+                resp = await client.post(_url(cfg, "/api/chat"), json=payload)
         except (httpx.ConnectError, httpx.ConnectTimeout) as err:
             raise BrainError("ollama_offline", str(err)) from err
     if resp.status_code != 200:
-        raise BrainError("ollama_error", resp.text)
-    content = (resp.json().get("message") or {}).get("content") or "{}"
+        raise BrainError("model_missing" if resp.status_code == 404 else "ollama_error", resp.text)
+    return (resp.json().get("message") or {}).get("content") or ""
+
+
+async def complete_json(cfg: dict, messages: list[dict]) -> dict:
+    content = await _complete(cfg, messages, temperature=0.2, format="json") or "{}"
     try:
         return json.loads(content)
     except json.JSONDecodeError:
@@ -245,25 +307,57 @@ def _model_matches(wanted: str, name: str) -> bool:
     return ":" not in wanted and name == f"{wanted}:latest"
 
 
+_capabilities: dict[tuple[str, str], list[str]] = {}
+
+
+async def capabilities(cfg: dict) -> list[str] | None:
+    """What the configured model can take in, e.g. ['completion', 'vision', 'audio'].
+
+    None means Ollama couldn't be asked right now (not the same as "can't hear").
+    """
+    key = (cfg["ollama_url"], cfg["model"])
+    if key not in _capabilities:
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
+                resp = await client.post(_url(cfg, "/api/show"), json={"model": cfg["model"]})
+        except Exception:  # noqa: BLE001 - unknown for now; ask again next time
+            return None
+        if resp.status_code != 200:
+            return None if resp.status_code >= 500 else []
+        _capabilities[key] = list(resp.json().get("capabilities") or [])
+    return _capabilities[key]
+
+
 async def status(cfg: dict) -> dict:
-    url = cfg["ollama_url"].rstrip("/") + "/api/tags"
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
-            resp = await client.get(url)
-        names = [m.get("name", "") for m in resp.json().get("models", [])]
+            resp = await client.get(_url(cfg, "/api/tags"))
+            names = [m.get("name", "") for m in resp.json().get("models", [])]
+            running = (await client.get(_url(cfg, "/api/ps"))).json().get("models", [])
     except Exception as err:  # noqa: BLE001 - any failure means "not reachable"
-        return {"reachable": False, "model": cfg["model"], "model_present": False,
-                "installed": [], "detail": str(err)}
-    return {"reachable": True, "model": cfg["model"],
-            "model_present": any(_model_matches(cfg["model"], n) for n in names),
-            "installed": names}
+        return {"reachable": False, "model": cfg["model"], "model_present": False, "loaded": False,
+                "hears": False, "sees": False, "installed": [], "detail": str(err)}
+    present = any(_model_matches(cfg["model"], n) for n in names)
+    caps = (await capabilities(cfg) or []) if present else []
+    return {"reachable": True, "model": cfg["model"], "model_present": present,
+            "loaded": any(_model_matches(cfg["model"], m.get("name", "")) for m in running),
+            "hears": "audio" in caps, "sees": "vision" in caps, "installed": names}
+
+
+_warming = False
 
 
 async def warm_up(cfg: dict) -> None:
     """Load the model into memory so the first reply is quick. Failures are ignored."""
-    url = cfg["ollama_url"].rstrip("/") + "/api/generate"
+    global _warming
+    if _warming:
+        return
+    _warming = True
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=600.0, write=10.0, pool=5.0)) as c:
-            await c.post(url, json={"model": cfg["model"], "prompt": "", "keep_alive": "2h"})
+            await c.post(_url(cfg, "/api/generate"), json={
+                "model": cfg["model"], "prompt": "", "keep_alive": _keep_alive(cfg), "options": _options(cfg)})
     except Exception:  # noqa: BLE001
         pass
+    finally:
+        _warming = False

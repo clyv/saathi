@@ -10,6 +10,7 @@ const NO_SPEECH_MS = 10000;   // stop listening if she says nothing for this lon
 const END_SILENCE_MS = 1600;  // a pause this long means she has finished speaking
 const MIN_SPEECH_MS = 250;    // ignore shorter blips (a cough, a door)
 const MAX_LISTEN_MS = 45000;
+const KEEP_WARM_MS = 10 * 60 * 1000;   // while this window is open, keep Gemma loaded
 
 const S = {
   settings: null, status: null, phase: "precall",
@@ -21,6 +22,9 @@ const S = {
   rec: null, recInfo: null, vadTimer: null, missedHeard: 0,
   callStart: 0, timer: null,
 };
+
+const female = () => (S.settings?.profile?.avatar || "bhaiya") === "didi";
+const myVerb = (m, f) => (female() ? f : m);   // Saathi's own verb endings follow its face
 
 // ------------------------------------------------------------------ setup ----
 async function loadSettings() {
@@ -49,6 +53,26 @@ async function checkSetup() {
     $("setupWarning").hidden = false;
     $("setupWarning").textContent = "For family: " + notes.join(" ");
   }
+}
+
+/** Gemma takes a while to load into memory. Show it on the start screen, but never block the button. */
+async function watchReady() {
+  const note = $("readyNote");
+  const t0 = Date.now();
+  while (S.phase === "precall") {
+    try { S.status = await (await fetch("/api/status")).json(); } catch { /* server starting */ }
+    const o = S.status?.ollama;
+    if (o?.loaded) { note.className = "ready ok"; note.textContent = `${S.settings?.profile?.companion_name || "साथी"} तैयार है`; return; }
+    if (o && (!o.reachable || !o.model_present)) { note.textContent = ""; return; }   // the setup warning explains
+    if (Date.now() - t0 > 180000) { note.textContent = ""; return; }
+    note.className = "ready warming";
+    note.textContent = "तैयार हो रहे हैं…";
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+}
+
+function keepWarm() {
+  fetch("/api/warmup", { method: "POST" }).catch(() => {});
 }
 
 function initAudio() {
@@ -154,6 +178,7 @@ async function playNext() {
   const item = S.queue.shift();
   if (!item) {
     if (S.streamDone) finishedSpeaking();
+    else if (S.phase === "speaking") setPhase("thinking");   // said the first bit; Gemma is still writing
     return;
   }
   S.playing = true;
@@ -225,7 +250,7 @@ function sayLocal(text, { listenAfter = true } = {}) {
 }
 
 // --------------------------------------------------------- talking to Gemma ----
-async function talk(url, payload) {
+async function talk(url, payload, { prelude = "" } = {}) {
   stopSpeaking();
   stopListening(true);
   const gen = ++S.generation;
@@ -234,6 +259,7 @@ async function talk(url, payload) {
   S.streamDone = false;
   S.lastSentences = [];
   setPhase("thinking");
+  if (prelude) enqueue(prelude);           // something to say while Gemma loads
   let buf = "", failed = false;
   try {
     const r = await fetch(url, {
@@ -291,9 +317,8 @@ function showError(ev) {
     model_missing: "परिवार के लिए: Gemma मॉडल डाउनलोड नहीं है। scripts/setup.py चलाएँ।",
     network: "परिवार के लिए: Saathi का सर्वर बंद हो गया है। start वाली फ़ाइल फिर से चलाएँ।",
   }[ev.code] || "परिवार के लिए: " + (ev.detail || ev.code || "unknown error").slice(0, 160);
-  const female = (S.settings?.profile?.avatar || "bhaiya") === "didi";
   S.errorStatus = forFamily;
-  sayLocal(`माफ़ कीजिए, अभी मैं जवाब नहीं दे पा ${female ? "रही" : "रहा"} हूँ। किसी घर वाले को बुला लीजिए।`, { listenAfter: false });
+  sayLocal(`माफ़ कीजिए, अभी मैं जवाब नहीं दे पा ${myVerb("रहा", "रही")} हूँ। किसी घर वाले को बुला लीजिए।`, { listenAfter: false });
   setPhase("error", forFamily);
 }
 
@@ -362,12 +387,13 @@ async function onRecorded(blob, info) {
   let text = "";
   try {
     const r = await fetch("/api/listen", { method: "POST", body: form });
-    if (r.status === 503) {
+    const body = await r.json();
+    if (body.error === "stt_unavailable") {
       S.micAvailable = false;
       setPhase("idle", "सुनने वाला हिस्सा चालू नहीं है। 'लिखिए' दबाकर लिखिए।");
       return;
     }
-    text = ((await r.json()).text || "").trim();
+    text = (body.text || "").trim();          // a one-off failure counts as "didn't hear" below
   } catch {
     showError({ code: "network" });
     return;
@@ -425,7 +451,9 @@ async function startCall() {
   $("youCaption").textContent = "";
   $("saathiCaption").textContent = "";
   setPhase("thinking");
-  talk("/api/greet");
+  const cold = S.status && S.status.ollama?.reachable && !S.status.ollama.loaded;
+  const hello = `नमस्ते ${S.settings?.address || ""}! बस एक मिनट, मैं आ ${myVerb("रहा", "रही")} हूँ।`.replace("नमस्ते आप!", "नमस्ते!");
+  talk("/api/greet", {}, { prelude: cold ? hello : "" });
 }
 
 function endCall() {
@@ -480,9 +508,13 @@ function animate() {
 // ------------------------------------------------------------------- wire ----
 window.addEventListener("DOMContentLoaded", async () => {
   if ("speechSynthesis" in window) { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices(); }
+  keepWarm();                                   // start loading Gemma now, not when she presses the button
+  setInterval(keepWarm, KEEP_WARM_MS);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) keepWarm(); });
   try { await loadSettings(); } catch { $("helloSub").textContent = "Saathi का सर्वर नहीं मिल रहा।"; }
-  checkSetup();
+  await checkSetup();
   setPhase("precall");
+  watchReady();
   requestAnimationFrame(animate);
 
   $("startBtn").addEventListener("click", startCall);

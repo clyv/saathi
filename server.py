@@ -27,12 +27,19 @@ voice = Voice()
 # What has been said since the current call started (for memory extraction).
 SESSION = {"transcript": [], "user_turns": 0, "extracted_upto": 0}
 _memory_lock = asyncio.Lock()
+_background: set[asyncio.Task] = set()    # keep references so tasks are not garbage-collected
+
+
+def _spawn(coro) -> None:
+    task = asyncio.create_task(coro)
+    _background.add(task)
+    task.add_done_callback(_background.discard)
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     cfg = settings.load()["config"]
-    asyncio.create_task(brain.warm_up(cfg))                       # load Gemma into memory
+    _spawn(brain.warm_up(cfg))                                    # load Gemma into memory
     threading.Thread(target=ears.preload, args=(cfg,), daemon=True).start()
     threading.Thread(target=voice.preload, args=(cfg,), daemon=True).start()
     yield
@@ -83,6 +90,13 @@ async def get_status():
     }
 
 
+@app.post("/api/warmup")
+async def warmup():
+    """The call screen asks for this when it opens, and every few minutes while it stays open."""
+    _spawn(brain.warm_up(settings.load()["config"]))
+    return {"ok": True}
+
+
 # --------------------------------------------------------------------- chat ----
 def _line(obj: dict) -> bytes:
     return (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
@@ -131,7 +145,7 @@ def _maybe_extract(cfg: dict, force: bool = False) -> None:
     user_turns = sum(1 for m in chunk if m["role"] == "user")
     if user_turns and (force or user_turns >= cfg["memory_every_turns"]):
         SESSION["extracted_upto"] = len(SESSION["transcript"])
-        asyncio.create_task(_extract_memories(chunk))
+        _spawn(_extract_memories(chunk))
 
 
 def _reply(user_text: str = "", greeting: bool = False) -> StreamingResponse:
@@ -143,12 +157,14 @@ def _reply(user_text: str = "", greeting: bool = False) -> StreamingResponse:
     messages = [{"role": "system",
                  "content": brain.system_prompt(profile, memory.memories(), family, datetime.now())}]
     messages += memory.recent_messages(cfg["history_messages"], cfg["history_hours"])
+    alert = safety.check(user_text) if user_text else None
     if user_text:
-        messages.append({"role": "user", "content": user_text})
+        # When the keyword check fires, Gemma is told too, so its voice matches the card on screen.
+        note = f"\n\n{brain.alert_note(alert, profile)}" if alert else ""
+        messages.append({"role": "user", "content": user_text + note})
     if greeting:
         messages.append({"role": "user", "content": brain.greeting_instruction(profile, bool(new_ids))})
     messages = _alternate(messages)
-    alert = safety.check(user_text) if user_text else None
 
     async def generate():
         if alert:
@@ -178,6 +194,7 @@ def _reply(user_text: str = "", greeting: bool = False) -> StreamingResponse:
 
 class ChatIn(BaseModel):
     text: str
+
 
 
 @app.post("/api/greet")

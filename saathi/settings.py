@@ -2,6 +2,7 @@
 import copy
 import json
 import os
+import re
 import threading
 from pathlib import Path
 
@@ -33,6 +34,7 @@ DEFAULT_CONFIG = {
     "model": "gemma4:e4b",
     "temperature": 0.7,
     "num_ctx": 8192,
+    "keep_alive": "30m",             # Ollama keeps Gemma loaded this long after the call window closes
     "history_hours": 6,              # raw chat history older than this is left out of the prompt
     "history_messages": 14,          # at most this many recent messages go into the prompt
     "stt_model": "small",            # faster-whisper size: base (fast) | small | medium (better)
@@ -103,6 +105,9 @@ def save(new: dict) -> dict:
     config["memory_every_turns"] = min(max(int(config["memory_every_turns"]), 2), 50)
     if config["stt_device"] not in ("cpu", "cuda"):
         config["stt_device"] = "cpu"
+    if not re.fullmatch(r"-1|\d+[smh]?", str(config["keep_alive"]).strip()):
+        config["keep_alive"] = DEFAULT_CONFIG["keep_alive"]
+    config["keep_alive"] = str(config["keep_alive"]).strip()
     if config["text_size"] not in ("normal", "large", "huge"):
         config["text_size"] = "large"
 

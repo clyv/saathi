@@ -40,7 +40,7 @@
 
       <section class="card">
         <div class="card-head"><h2>Family members</h2><button type="button" class="ghost" id="addMember">+ Add person</button></div>
-        <p class="hint">Saathi uses this to talk about the people they love, and to remind them to call.</p>
+        <p class="hint">Saathi uses this to talk about the people they love, and to remind them to call. Write names the way they are said, in Hindi if you can (e.g. <span lang="hi">क्लिविन</span> rather than Clivin), so the voice pronounces them right.</p>
         <div id="members"></div>
       </section>
 
@@ -96,6 +96,10 @@
           </label>
           <label>Ollama address <input name="config.ollama_url"></label>
           <label>Creativity (temperature) <input type="number" name="config.temperature" min="0" max="1.5" step="0.1"></label>
+          <label>Keep Gemma loaded after the call window closes
+            <input name="config.keep_alive" placeholder="30m">
+            <small>e.g. 30m, 2h, or -1 for always. While the call window is open it always stays loaded.</small>
+          </label>
           <label>Listening model (Whisper)
             <select name="config.stt_model"><option value="base">base (fastest)</option><option value="small">small (recommended)</option><option value="medium">medium (most accurate, slower)</option><option value="large-v3-turbo">large-v3-turbo (GPU)</option></select>
           </label>
@@ -133,7 +137,7 @@
 
   <template id="memberRow">
     <div class="member">
-      <input data-k="name" placeholder="Name">
+      <input data-k="name" placeholder="Name (e.g. क्लिविन)">
       <input data-k="relation" placeholder="Relation (e.g. nephew)">
       <input data-k="lives_in" placeholder="Lives in (e.g. Dubai)">
       <input data-k="note" placeholder="Note (e.g. calls on Sundays)">
