@@ -10,6 +10,8 @@ if not exist ".venv\Scripts\python.exe" (
   echo.
   echo Now downloading the AI models. This needs internet, one time only.
   ".venv\Scripts\python.exe" scripts\setup.py
+  REM A smiling-face "Saathi" shortcut on the desktop, so she never has to find this file
+  ".venv\Scripts\python.exe" scripts\setup.py --shortcut
 )
 
 REM Start the server in its own minimised window (if it is already running, this copy just exits)

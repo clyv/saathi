@@ -3,14 +3,18 @@
     python scripts/setup.py                   # Gemma + Whisper + the configured Hindi voice
     python scripts/setup.py --all-voices      # also fetch every Hindi voice, to compare them
     python scripts/setup.py --model gemma4:e2b --whisper base   # smaller, for older laptops
+    python scripts/setup.py --shortcut        # only put a "साथी" shortcut on the desktop (Windows)
 
 What it downloads:
   * Gemma, through your local Ollama        (a few GB; size depends on the model tag)
-  * Whisper speech recognition (faster-whisper)  ->  models/whisper/<size>/
+  * Whisper speech recognition (faster-whisper)  ->  models/whisper/<size>/   (backup ears)
   * Piper Hindi voice(s)                          ->  models/piper/
 """
 import argparse
+import base64
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -102,6 +106,29 @@ def setup_voices(voices: list[str]) -> bool:
     return ok
 
 
+def make_shortcut(folder: str | None = None) -> bool:
+    """Put a 'साथी' shortcut (smiling-face icon) on the Windows desktop that runs start.bat."""
+    if os.name != "nt":
+        print(INFO + "Desktop shortcut is Windows-only; on Linux/macOS, run ./start.sh.")
+        return True
+    root = settings.ROOT
+    target = f"'{folder}'" if folder else "[Environment]::GetFolderPath('Desktop')"
+    # WScript.Shell can't save a Hindi file name, so save Saathi.lnk and rename it.
+    script = (f"$d = {target}; $tmp = Join-Path $d 'Saathi.lnk'; "
+              "$s = (New-Object -ComObject WScript.Shell).CreateShortcut($tmp); "
+              f"$s.TargetPath = '{root / 'start.bat'}'; $s.WorkingDirectory = '{root}'; "
+              f"$s.IconLocation = '{root / 'web' / 'saathi.ico'}'; $s.WindowStyle = 7; "
+              "$s.Description = 'Saathi: talk in Hindi'; $s.Save(); "
+              "Move-Item -LiteralPath $tmp -Destination (Join-Path $d 'साथी.lnk') -Force")
+    encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")   # keeps the Devanagari intact
+    done = subprocess.run(["powershell", "-NoProfile", "-EncodedCommand", encoded], capture_output=True, text=True)
+    if done.returncode != 0:
+        print(BAD + f"Could not make the desktop shortcut: {done.stderr.strip()[:200]}")
+        return False
+    print(OK + "Put a साथी shortcut on the desktop.")
+    return True
+
+
 def main() -> int:
     cfg = settings.load()["config"]
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -110,7 +137,12 @@ def main() -> int:
     ap.add_argument("--voice", default=cfg["voice"], help=f"Piper voice (default {cfg['voice']})")
     ap.add_argument("--all-voices", action="store_true", help="download every Hindi voice")
     ap.add_argument("--skip-ollama", action="store_true")
+    ap.add_argument("--shortcut", action="store_true", help="only create the desktop shortcut (Windows)")
+    ap.add_argument("--shortcut-dir", help=argparse.SUPPRESS)       # for testing
     args = ap.parse_args()
+
+    if args.shortcut:
+        return 0 if make_shortcut(args.shortcut_dir) else 1
 
     print("Saathi setup. Everything is saved on this computer.")
     results = []
