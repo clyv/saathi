@@ -221,6 +221,20 @@ def test_memories_and_messages_get_relative_dates():
     assert "cannot play songs" in prompt                          # it once offered to play music
 
 
+def test_greeting_follows_up_on_her_health_first():
+    today = date(2026, 10, 4)
+    mems = [{"date": "2026-10-03", "text": "मौसी जी बाथरूम में गिरी थीं।"},
+            {"date": "2026-10-03", "text": "मौसी जी ने गाजर का हलवा बनाया।"},
+            {"date": "2026-09-01", "text": "मौसी जी के घुटने में दर्द था।"}]          # too old to ask about
+    picked = brain.memory_to_ask_about(mems, today)
+    assert picked["text"].startswith("मौसी जी बाथरूम में गिरी")
+    note = brain.greeting_instruction({"address_as": "मौसी जी"}, False, picked, today)
+    assert "(कल)" in note and "गिरी थीं" in note
+    assert brain.memory_to_ask_about(mems[2:], today) is None
+    # A new family message still comes first.
+    assert "NEW family message" in brain.greeting_instruction({}, True, picked, today)
+
+
 def test_retries_without_think_for_older_models(client):
     client.put("/api/settings", json={"config": {"model": "nothink-model"}})
     os.environ.pop("SAATHI_MODEL", None)

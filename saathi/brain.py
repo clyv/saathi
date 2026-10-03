@@ -166,12 +166,36 @@ WHEN {p['She'].upper()} SHOWS YOU SOMETHING ON THE CAMERA
 - If it is a medicine, do not say what it is for or how to take it; suggest {p['she']} ask the doctor or family."""
 
 
-def greeting_instruction(profile: dict, has_new_messages: bool) -> str:
+# Words that make a remembered fact worth asking about first: her health comes before her halwa.
+_HEALTH = ("दर्द", "गिर", "चोट", "बीमार", "तबीयत", "बुखार", "डॉक्टर", "दवा", "अस्पताल", "नींद", "चक्कर", "थकान", "उदास")
+
+
+def memory_to_ask_about(memories: list[dict], today: date) -> dict | None:
+    """The remembered fact the greeting should follow up on: a recent health one if there is one,
+    else the newest. Left to choose, Gemma often skipped the follow-up altogether."""
+    recent = []
+    for m in memories[-10:]:
+        try:
+            if (today - date.fromisoformat(m["date"])).days < 7:
+                recent.append(m)
+        except (KeyError, TypeError, ValueError):
+            continue
+    health = [m for m in recent if any(w in m["text"] for w in _HEALTH)]
+    return (health or recent or [None])[-1]
+
+
+def greeting_instruction(profile: dict, has_new_messages: bool, memory: dict | None = None,
+                         today: date | None = None) -> str:
     address = address_of(profile)
     p = pronouns(profile)
-    task = (f"Tell {p['her_obj']} about the NEW family message first, warmly and in your own words."
-            if has_new_messages else
-            f"If you remember something from earlier chats, ask about it. Otherwise ask how {p['her']} day is going.")
+    if has_new_messages:
+        task = f"Tell {p['her_obj']} about the NEW family message first, warmly and in your own words."
+    elif memory:
+        when = how_long_ago(memory["date"], today or date.today())
+        task = (f"Then follow up on something {p['she']} told you ({when}): \"{memory['text']}\" "
+                f"Ask, in your own words, how it went or how {p['she']} is now.")
+    else:
+        task = f"Ask how {p['her']} day is going."
     return (f"(सिस्टम: कॉल अभी शुरू हुई है। This note is from the app, not from {p['her_obj']}.) "
             f"Greet {address} warmly for this time of day in one or two short sentences. {task} "
             "End with one simple question.")

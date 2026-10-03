@@ -178,7 +178,10 @@ def _reply(user_text: str = "", greeting: bool = False, image: str | None = None
         note = f"\n\n{brain.alert_note(alert, profile)}" if alert else ""
         messages.append({"role": "user", "content": user_text + note})
     if greeting:
-        messages.append({"role": "user", "content": brain.greeting_instruction(profile, bool(new_ids))})
+        today = datetime.now().date()
+        follow_up = brain.memory_to_ask_about(memory.memories(), today)
+        messages.append({"role": "user",
+                         "content": brain.greeting_instruction(profile, bool(new_ids), follow_up, today)})
     messages = _alternate(messages)
     said = f"{brain.SHOWED_PICTURE} {user_text}".strip() if image else user_text
 
