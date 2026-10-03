@@ -1,5 +1,7 @@
 # Personal data and downloaded models stay on the computer, never in git
 data/
+# Post drafts and handover notes for the challenge (they will hold her details)
+submission/
 models/
 .venv/
 __pycache__/
