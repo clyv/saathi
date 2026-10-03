@@ -1,11 +1,16 @@
 """End-to-end tests against a fake Ollama.   Run:  python -m pytest -q"""
+import base64
+import io
 import json
+import math
 import os
 import socket
+import struct
 import sys
 import tempfile
 import threading
 import time
+import wave
 from datetime import date
 from pathlib import Path
 
@@ -61,7 +66,9 @@ def test_status_sees_gemma(client):
     st = client.get("/api/status").json()
     assert st["ollama"]["reachable"] and st["ollama"]["model_present"]
     assert st["ollama"]["hears"] and st["ollama"]["sees"]
-    assert st["stt"]["available"] is False and st["tts"]["available"] is False
+    # No Whisper downloaded, but Gemma can hear, so listening works.
+    assert st["stt"]["engine"] == "gemma" and st["stt"]["available"] is True
+    assert st["stt"]["whisper"] is False and st["tts"]["available"] is False
 
 
 def test_warm_up_loads_gemma_the_same_way_chat_does(client):
@@ -81,13 +88,13 @@ def test_settings_roundtrip(client):
                         "family": [{"name": "Clivin", "relation": "nephew", "lives_in": "Dubai"}, {"name": ""}],
                         "emergency_contact_name": "Rahul", "emergency_contact_phone": "+91 98765 43210"},
             "config": {"speech_speed": 5, "auto_listen": False, "unknown_key": 1,
-                       "keep_alive": "forever"}}
+                       "keep_alive": "forever", "stt_engine": "magic"}}
     saved = client.put("/api/settings", json=body).json()
     assert saved["address"] == "मौसी जी"
     assert len(saved["profile"]["family"]) == 1               # empty rows dropped
     assert saved["config"]["speech_speed"] == 1.4               # clamped
     assert "unknown_key" not in saved["config"]
-    assert saved["config"]["keep_alive"] == "30m"
+    assert saved["config"]["keep_alive"] == "30m" and saved["config"]["stt_engine"] == "gemma"
 
 
 def test_greeting_passes_on_family_message(client):
@@ -142,10 +149,44 @@ def test_memories_are_extracted_after_call(client):
     assert len(client.get("/api/memories").json()) == len(mems) - 1
 
 
+def _tone_wav(seconds: float = 1.0, rate: int = 48000) -> bytes:
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(b"".join(struct.pack("<h", int(8000 * math.sin(i / 20)))
+                               for i in range(int(seconds * rate))))
+    return buf.getvalue()
+
+
+def test_gemma_hears_her(client):
+    r = client.post("/api/listen", files={"audio": ("speech.wav", _tone_wav(), "audio/wav")})
+    assert r.json() == {"text": fake_ollama.HEARD, "engine": "gemma"}
+    req = fake_ollama.REQUESTS[-1]
+    assert "speech-to-text" in req["messages"][0]["content"]       # instruction in the system turn
+    sent = base64.b64decode(req["messages"][1]["images"][0])
+    with wave.open(io.BytesIO(sent)) as w:                         # resampled for Gemma
+        assert (w.getframerate(), w.getnchannels()) == (16000, 1)
+        assert abs(w.getnframes() - 16000) < 400
+    assert req["options"]["num_ctx"] == 8192
+
+
+def test_transcript_cleanup():
+    assert brain.clean_transcript("-") == ""
+    assert brain.clean_transcript(" — ") == ""
+    assert brain.clean_transcript("transcribe this audio exactly as spoken in devanagari script") == ""
+    assert brain.clean_transcript("आज मैंने फ़ोन पर Rahul से बात की") == "आज मैंने फ़ोन पर Rahul से बात की"
+
+
 def test_speech_endpoints_fall_back_cleanly(client):
     r = client.post("/api/speak", json={"text": "नमस्ते"})
     assert r.status_code == 503 and r.json()["fallback"] is True
     r = client.post("/api/listen", files={"audio": ("a.webm", b"x" * 2000, "audio/webm")})
+    assert r.status_code == 503 and r.json()["error"] == "stt_failed"     # garbage audio, no Whisper backup
+    client.put("/api/settings", json={"config": {"stt_engine": "whisper"}})
+    r = client.post("/api/listen", files={"audio": ("speech.wav", _tone_wav(), "audio/wav")})
+    client.put("/api/settings", json={"config": {"stt_engine": "gemma"}})
     assert r.status_code == 503 and r.json()["error"] == "stt_unavailable"
 
 
@@ -177,8 +218,11 @@ def test_friendly_errors(client):
     old = os.environ["SAATHI_OLLAMA_URL"]
     os.environ["SAATHI_OLLAMA_URL"] = f"http://127.0.0.1:{_free_port()}"
     evs = events(client.post("/api/chat", json={"text": "हेलो"}))
+    # Ollama being down is a one-off listening failure, not "this computer can't listen".
+    heard = client.post("/api/listen", files={"audio": ("speech.wav", _tone_wav(), "audio/wav")}).json()
     os.environ["SAATHI_OLLAMA_URL"] = old
     assert evs[-1]["code"] == "ollama_offline"
+    assert heard["error"] == "stt_failed"
 
 
 def test_keep_alive_is_sent_the_way_ollama_reads_it():

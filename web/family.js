@@ -21,9 +21,16 @@ async function refreshStatus() {
       (st.ollama.installed.length ? ` Installed: ${st.ollama.installed.map((n) => `<code>${esc(n)}</code>`).join(" ")}` : "")]);
   else items.push(["ok", `Gemma is ready: <code>${esc(st.ollama.model)}</code> running locally in Ollama` +
       (st.ollama.loaded ? " (loaded in memory)." : " (it loads when the call window opens).")]);
-  items.push(st.stt.available
-    ? ["ok", `Listening works offline (Whisper <code>${esc(st.stt.model)}</code> on ${esc(st.stt.device.toUpperCase())}).` + (st.stt.note ? ` <span class="hint">${esc(st.stt.note)}</span>` : "")]
-    : ["bad", `Whisper <code>${esc(st.stt.model)}</code> is not downloaded, so Saathi can't hear. Run <code>python scripts/setup.py</code>.`]);
+  const note = st.stt.note ? ` <span class="hint">${esc(st.stt.note)}</span>` : "";
+  if (st.stt.engine === "gemma") {
+    items.push(["ok", `Listening: Gemma hears them directly, offline.` +
+      (st.stt.whisper ? ` Whisper <code>${esc(st.stt.model)}</code> is the backup.` : " (No Whisper backup downloaded; that's fine.)") + note]);
+  } else if (st.stt.whisper) {
+    items.push(["ok", `Listening: Whisper <code>${esc(st.stt.model)}</code> on ${esc(st.stt.device.toUpperCase())}, offline.` +
+      (st.stt.chosen === "gemma" && st.ollama.model_present ? ` <code>${esc(st.ollama.model)}</code> has no audio input, so Whisper listens instead.` : "") + note]);
+  } else {
+    items.push(["bad", `Nothing can listen yet: <code>${esc(st.ollama.model)}</code> can't take audio and Whisper isn't downloaded. Use <code>gemma4:e4b</code> or <code>e2b</code>, or run <code>python scripts/setup.py</code>.`]);
+  }
   items.push(st.tts.available
     ? ["ok", `Hindi voice installed: <code>${esc(st.tts.voice)}</code>.`]
     : ["warn", `Voice <code>${esc(st.tts.voice)}</code> is not installed. Saathi will try the browser's Hindi voice. Run <code>python scripts/setup.py</code>.`]);

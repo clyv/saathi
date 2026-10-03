@@ -100,7 +100,11 @@
             <input name="config.keep_alive" placeholder="30m">
             <small>e.g. 30m, 2h, or -1 for always. While the call window is open it always stays loaded.</small>
           </label>
-          <label>Listening model (Whisper)
+          <label>Who listens to them
+            <select name="config.stt_engine"><option value="gemma">Gemma itself (fastest, no extra model)</option><option value="whisper">Whisper (separate speech model)</option></select>
+            <small>If Gemma can't hear (e.g. gemma4:12b has no audio input), Saathi uses Whisper.</small>
+          </label>
+          <label>Whisper model (fallback)
             <select name="config.stt_model"><option value="base">base (fastest)</option><option value="small">small (recommended)</option><option value="medium">medium (most accurate, slower)</option><option value="large-v3-turbo">large-v3-turbo (GPU)</option></select>
           </label>
           <label>Listening runs on

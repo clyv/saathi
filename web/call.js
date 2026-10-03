@@ -9,7 +9,7 @@ const $ = (id) => document.getElementById(id);
 const NO_SPEECH_MS = 10000;   // stop listening if she says nothing for this long
 const END_SILENCE_MS = 1600;  // a pause this long means she has finished speaking
 const MIN_SPEECH_MS = 250;    // ignore shorter blips (a cough, a door)
-const MAX_LISTEN_MS = 45000;
+const MAX_LISTEN_MS = 30000;   // Gemma hears clips of up to about 30 seconds
 const KEEP_WARM_MS = 10 * 60 * 1000;   // while this window is open, keep Gemma loaded
 
 const S = {

@@ -1,8 +1,39 @@
-"""Saathi's ears: offline Hindi speech-to-text with faster-whisper (open-source Whisper)."""
+"""Saathi's ears: offline Hindi speech-to-text.
+
+By default Gemma hears her directly (see brain.transcribe); this file turns the browser's
+recording into the WAV Gemma accepts. faster-whisper (open-source Whisper) is the fallback,
+for models without audio input or if Gemma's hearing fails.
+"""
+import io
 import threading
+import wave
 from pathlib import Path
 
 from .settings import MODELS_DIR
+
+GEMMA_MAX_SECONDS = 30     # Gemma's audio input is made for clips up to about 30 seconds
+
+
+def to_wav16k(audio_path: str) -> tuple[bytes, float]:
+    """Decode any recording (the browser sends WebM/Opus) to 16 kHz mono 16-bit WAV.
+
+    Returns (wav bytes, duration in seconds).
+    """
+    import av  # installed with faster-whisper
+
+    out = io.BytesIO()
+    samples = 0
+    resampler = av.AudioResampler(format="s16", layout="mono", rate=16000)
+    with av.open(audio_path) as container, wave.open(out, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(16000)
+        frames = [f for frame in container.decode(audio=0) for f in resampler.resample(frame)]
+        frames += resampler.resample(None)          # flush what the resampler is holding
+        for f in frames:
+            wav.writeframes(bytes(f.planes[0])[:f.samples * 2])
+            samples += f.samples
+    return out.getvalue(), samples / 16000
 
 # Whisper sometimes "hears" these on silence or noise. Ignore them when they are all it heard.
 _PHANTOMS = {"धन्यवाद", "धन्यवाद।", "शुक्रिया", "thank you", "thanks for watching",

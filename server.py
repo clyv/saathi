@@ -1,6 +1,7 @@
 """Saathi server. Run:  python server.py   then open http://127.0.0.1:8765
 
-Everything runs on this computer: Gemma through Ollama, Whisper for listening, Piper for speaking.
+Everything runs on this computer: Gemma through Ollama hears, thinks and remembers;
+Piper speaks; Whisper is the fallback for listening.
 """
 import argparse
 import asyncio
@@ -18,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from saathi import __version__, brain, memory, safety, settings
-from saathi.ears import Ears
+from saathi.ears import GEMMA_MAX_SECONDS, Ears, to_wav16k
 from saathi.voice import HINDI_VOICES, Voice
 
 ears = Ears()
@@ -40,7 +41,8 @@ def _spawn(coro) -> None:
 async def lifespan(_app: FastAPI):
     cfg = settings.load()["config"]
     _spawn(brain.warm_up(cfg))                                    # load Gemma into memory
-    threading.Thread(target=ears.preload, args=(cfg,), daemon=True).start()
+    if cfg["stt_engine"] == "whisper":                            # otherwise Whisper loads only if needed
+        threading.Thread(target=ears.preload, args=(cfg,), daemon=True).start()
     threading.Thread(target=voice.preload, args=(cfg,), daemon=True).start()
     yield
 
@@ -79,10 +81,15 @@ def put_settings(body: dict):
 @app.get("/api/status")
 async def get_status():
     cfg = settings.load()["config"]
+    gemma = await brain.status(cfg)
+    whisper = ears.available(cfg["stt_model"])
+    gemma_hears = cfg["stt_engine"] == "gemma" and gemma["hears"]
     return {
-        "ollama": await brain.status(cfg),
-        "stt": {"model": cfg["stt_model"], "device": cfg["stt_device"],
-                "available": ears.available(cfg["stt_model"]), "note": ears.last_error},
+        "ollama": gemma,
+        "stt": {"engine": "gemma" if gemma_hears else "whisper", "chosen": cfg["stt_engine"],
+                "gemma_hears": gemma["hears"], "whisper": whisper,
+                "model": cfg["stt_model"], "device": cfg["stt_device"],
+                "available": gemma_hears or whisper, "note": ears.last_error},
         "tts": {"voice": cfg["voice"], "available": voice.available(cfg["voice"]),
                 "installed": voice.installed(), "note": voice.last_error},
         "data_dir": str(settings.DATA_DIR),
@@ -220,12 +227,30 @@ async def end_session():
 
 
 # ------------------------------------------------------------ ears + voice ----
+async def _hear(path: str, cfg: dict) -> tuple[str, str]:
+    """Turn her recording into text. Returns (text, which engine heard it)."""
+    whisper = ears.available(cfg["stt_model"])
+    caps = await brain.capabilities(cfg) if cfg["stt_engine"] == "gemma" else []
+    if caps is None and not whisper:
+        raise RuntimeError("Ollama is not reachable right now")   # a one-off failure, not "can't hear"
+    if caps and "audio" in caps:
+        try:
+            wav, seconds = await asyncio.to_thread(to_wav16k, path)
+            if seconds <= GEMMA_MAX_SECONDS or not whisper:
+                return await brain.transcribe(cfg, wav), "gemma"
+        except Exception as err:  # noqa: BLE001 - fall back to Whisper if it is there
+            if not whisper:
+                raise
+            ears.last_error = f"Gemma could not hear a clip ({str(err)[:120]}); Whisper listened instead."
+    if not whisper:
+        raise LookupError("Nothing can listen: the Gemma model has no audio input and Whisper is not "
+                          "downloaded. Run: python scripts/setup.py")
+    return await asyncio.to_thread(ears.transcribe, path, cfg), "whisper"
+
+
 @app.post("/api/listen")
 async def listen(audio: UploadFile = File(...)):
     cfg = settings.load()["config"]
-    if not ears.available(cfg["stt_model"]):
-        return JSONResponse({"error": "stt_unavailable",
-                             "detail": "Whisper model missing. Run: python scripts/setup.py"}, status_code=503)
     suffix = ".webm" if "webm" in (audio.content_type or "") else ".ogg" if "ogg" in (audio.content_type or "") else ".wav"
     data = await audio.read()
     if len(data) < 1000:
@@ -234,7 +259,9 @@ async def listen(audio: UploadFile = File(...)):
         tmp.write(data)
         path = tmp.name
     try:
-        text = await asyncio.to_thread(ears.transcribe, path, cfg)
+        text, engine = await _hear(path, cfg)
+    except LookupError as err:
+        return JSONResponse({"error": "stt_unavailable", "detail": str(err)}, status_code=503)
     except Exception as err:  # noqa: BLE001
         return JSONResponse({"error": "stt_failed", "detail": str(err)[:300]}, status_code=503)
     finally:
@@ -242,7 +269,7 @@ async def listen(audio: UploadFile = File(...)):
             os.remove(path)
         except OSError:
             pass
-    return {"text": text}
+    return {"text": text, "engine": engine}
 
 
 class SpeakIn(BaseModel):

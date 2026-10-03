@@ -37,6 +37,7 @@ DEFAULT_CONFIG = {
     "keep_alive": "30m",             # Ollama keeps Gemma loaded this long after the call window closes
     "history_hours": 6,              # raw chat history older than this is left out of the prompt
     "history_messages": 14,          # at most this many recent messages go into the prompt
+    "stt_engine": "gemma",           # who hears her: gemma (Gemma's own audio input) | whisper
     "stt_model": "small",            # faster-whisper size: base (fast) | small | medium (better)
     "stt_device": "cpu",             # cpu (reliable everywhere) | cuda (needs CUDA + cuDNN)
     "voice": "hi_IN-rohan-medium",   # Piper voice; see README for the Hindi options
@@ -105,6 +106,8 @@ def save(new: dict) -> dict:
     config["memory_every_turns"] = min(max(int(config["memory_every_turns"]), 2), 50)
     if config["stt_device"] not in ("cpu", "cuda"):
         config["stt_device"] = "cpu"
+    if config["stt_engine"] not in ("gemma", "whisper"):
+        config["stt_engine"] = "gemma"
     if not re.fullmatch(r"-1|\d+[smh]?", str(config["keep_alive"]).strip()):
         config["keep_alive"] = DEFAULT_CONFIG["keep_alive"]
     config["keep_alive"] = str(config["keep_alive"]).strip()

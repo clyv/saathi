@@ -10,6 +10,7 @@ REQUESTS: list[dict] = []          # every /api/chat body
 WARMUPS: list[dict] = []           # every /api/generate body
 LOADED: set[str] = set()
 REPLY = "नमस्ते मौसी जी! आज आपका दिन कैसा रहा? क्या आपने खाना खा लिया।"
+HEARD = "आज मैंने खीर बनाई"
 
 
 @app.get("/api/tags")
@@ -57,6 +58,8 @@ async def chat(request: Request):
     if body["model"] == "missing-model":
         return JSONResponse({"error": "model 'missing-model' not found"}, status_code=404)
     messages = body["messages"]
+    if messages[0]["role"] == "system" and "speech-to-text" in messages[0]["content"]:
+        return {"message": {"role": "assistant", "content": HEARD}, "done": True}
     if body.get("format") == "json":
         return {"message": {"role": "assistant",
                             "content": json.dumps({"memories": ["मौसी जी ने आलू के पराठे बनाए।"]},

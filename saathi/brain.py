@@ -1,7 +1,11 @@
 """Saathi's brain: builds the prompt and talks to Gemma through a local Ollama server.
 
+Gemma does every "thinking" job: it hears her (audio in), talks with her, and decides what to
+remember.
+
 Nothing here calls the internet. Ollama runs on the same laptop (http://127.0.0.1:11434).
 """
+import base64
 import json
 import re
 from datetime import date, datetime
@@ -208,6 +212,24 @@ def alert_note(kind: str, profile: dict) -> str:
             f"details and to check with {who} first.)")
 
 
+# Gemma 4 E2B/E4B can hear. The instruction goes in the system turn: when it was in the user
+# turn, Gemma "transcribed" the instruction itself whenever the audio was silent.
+HEAR_SYSTEM = ("You are a Hindi speech-to-text engine. Write exactly what the speaker says, in "
+               "Devanagari script. Output only the transcript. If the audio has no speech, output only: -")
+
+
+def clean_transcript(text: str) -> str:
+    """Drop Gemma's 'no speech' marker and anything that is clearly not her words."""
+    text = " ".join((text or "").split()).strip(" \"'")
+    if text.strip(" -–—.।") == "":
+        return ""
+    latin = len(re.findall(r"[A-Za-z]", text))
+    devanagari = len(re.findall(r"[ऀ-ॿ]", text))
+    if latin > 12 and latin > devanagari:     # an echo of the instruction, not Hindi speech
+        return ""
+    return text
+
+
 # ------------------------------------------------------------------- ollama ----
 def _timeout() -> httpx.Timeout:
     return httpx.Timeout(connect=5.0, read=300.0, write=30.0, pool=5.0)
@@ -299,6 +321,13 @@ async def complete_json(cfg: dict, messages: list[dict]) -> dict:
     except json.JSONDecodeError:
         start, end = content.find("{"), content.rfind("}")
         return json.loads(content[start:end + 1]) if start >= 0 < end else {}
+
+
+async def transcribe(cfg: dict, wav: bytes) -> str:
+    """Hindi speech (16 kHz mono WAV) -> Devanagari text, using Gemma's own audio input."""
+    messages = [{"role": "system", "content": HEAR_SYSTEM},
+                {"role": "user", "content": "", "images": [base64.b64encode(wav).decode("ascii")]}]
+    return clean_transcript(await _complete(cfg, messages, temperature=0.0))
 
 
 def _model_matches(wanted: str, name: str) -> bool:
