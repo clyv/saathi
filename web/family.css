@@ -6,7 +6,8 @@
 * { box-sizing: border-box; }
 body { margin: 0; font-family: var(--font); background: var(--bg); color: var(--text); font-size: 16px; line-height: 1.5; }
 .head { max-width: 980px; margin: 0 auto; padding: 32px 20px 8px; display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
-.head h1 { margin: 0; font-size: 28px; }
+.head h1 { margin: 0; font-size: 28px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.head h1 .logo { width: 40px; height: 40px; flex: none; }
 .head h1 span { color: var(--muted); font-weight: 400; font-size: 20px; }
 .head p { margin: 6px 0 0; color: var(--muted); }
 .back { color: var(--accent); text-decoration: none; font-weight: 600; padding-top: 8px; }
@@ -22,11 +23,13 @@ details.card summary::before { content: "▸ "; color: var(--muted); }
 details[open].card summary::before { content: "▾ "; }
 .hint { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px 18px; margin-bottom: 12px; }
-label { display: grid; gap: 6px; font-weight: 600; font-size: 14px; margin-bottom: 12px; }
+/* align-content: start keeps each field at its natural height when a neighbour has a hint under it */
+label { display: grid; gap: 6px; align-content: start; font-weight: 600; font-size: 14px; margin-bottom: 12px; }
 label small { font-weight: 400; color: var(--muted); }
 label.check { display: flex; align-items: center; gap: 10px; font-weight: 500; }
 label.check input { width: 20px; height: 20px; }
 input, select, textarea { font: inherit; font-weight: 400; padding: 10px 12px; border: 1px solid #d8ccc1; border-radius: 10px; background: #fffdfb; color: var(--text); width: 100%; }
+input:not([type=checkbox]):not([type=range]), select { height: 46px; }
 input[type=range] { padding: 0; accent-color: var(--accent); }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
 .value { font-weight: 400; color: var(--muted); }

@@ -39,7 +39,6 @@ async function loadSettings() {
   $("companionName").textContent = name;
   document.title = name;
   $("helloText").textContent = `नमस्ते ${S.settings.address}!`.replace("नमस्ते आप!", "नमस्ते!");
-  $("helloSub").textContent = `${name} आपसे बात करने के लिए तैयार है।`;
 }
 
 async function checkSetup() {
@@ -119,7 +118,7 @@ function setPhase(phase, statusHtml) {
   $("status").innerHTML = statusHtml ?? STATUS_TEXT[phase] ?? "&nbsp;";
   const mic = $("micBtn");
   mic.classList.toggle("active", phase === "listening");
-  $("micLabel").textContent = phase === "listening" ? "बस, हो गया" : (phase === "speaking" || phase === "thinking") ? "रोकिए, मैं बोलूँ" : "बोलिए";
+  $("micLabel").textContent = phase === "listening" ? "बस, हो गया" : (phase === "speaking" || phase === "thinking") ? "मैं बोलूँ" : "बोलिए";
   const inCall = phase !== "precall" && phase !== "ended";
   mic.disabled = !inCall || !S.micAvailable;
   $("typeBtn").disabled = !inCall;
@@ -419,21 +418,26 @@ async function onRecorded(blob, info) {
 // ------------------------------------------------------------------ alerts ----
 function showAlert(ev) {
   const card = $("alertCard");
-  const lines = [];
+  const numbers = [];                            // [who, number]: the number never breaks across lines
   if (ev.kind === "emergency") {
     card.classList.remove("scam");
     $("alertTitle").textContent = "🚨 अभी मदद लीजिए";
     $("alertBody").textContent = "अगर तबीयत ठीक नहीं लग रही, तो देर मत कीजिए। अभी फ़ोन कीजिए:";
-    if (ev.phone) lines.push(`${ev.contact || "परिवार"}: ${ev.phone}`);
-    lines.push(`आपातकालीन नंबर: ${ev.number}`);
+    if (ev.phone) numbers.push([ev.contact || "परिवार", ev.phone]);
+    numbers.push(["आपातकालीन नंबर", ev.number]);
   } else {
     card.classList.add("scam");
     $("alertTitle").textContent = "⚠️ सावधान रहिए";
     $("alertBody").textContent = "किसी को भी OTP, PIN, पासवर्ड या बैंक की जानकारी मत दीजिए। कोई पैसे माँगे या डराए, तो पहले परिवार से बात कीजिए।";
-    if (ev.phone) lines.push(`${ev.contact || "परिवार"}: ${ev.phone}`);
+    if (ev.phone) numbers.push([ev.contact || "परिवार", ev.phone]);
   }
-  $("alertPhone").textContent = lines.join("\n");
-  $("alertPhone").style.whiteSpace = "pre-line";
+  $("alertPhone").replaceChildren(...numbers.map(([who, num]) => {
+    const item = document.createElement("div");
+    const w = Object.assign(document.createElement("span"), { className: "who", textContent: who });
+    const n = Object.assign(document.createElement("span"), { className: "num", textContent: num });
+    item.append(w, n);
+    return item;
+  }));
   $("alert").hidden = false;
   $("alertClose").focus();
 }
